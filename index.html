@@ -6,12 +6,13 @@
     <title>抖音商品评价 AI 分析看板</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body { background: linear-gradient(135deg, #b2d3d1 0%, #d8e8e7 100%); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        .app-container { width: 95vw; max-width: 1400px; height: 95vh; max-height: 900px; background: #e3efee; border-radius: 40px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); display: flex; overflow: hidden; }
+        .app-container { width: 96vw; max-width: 1500px; height: 96vh; max-height: 1080px; background: #e3efee; border-radius: 40px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); display: flex; overflow: hidden; }
         .glass-card { background: rgba(255, 255, 255, 0.5); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.8); box-shadow: 0 8px 24px rgba(149, 157, 165, 0.1); }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 8px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); border-radius: 10px; }
@@ -105,21 +106,70 @@
                             <div class="text-xs text-gray-500 mt-1">API Key 会自动保存到本地数据库</div>
                         </div>
                         <div id="cfg-prompt" class="hidden flex-col gap-2 flex-1">
-                            <textarea id="promptInput" class="w-full h-full flex-1 bg-white/60 border border-gray-300 rounded-lg px-3 py-2 outline-none resize-none text-gray-700 text-sm custom-scrollbar" placeholder="输入提示词..." onchange="saveConfigToDB()">【核心规则】
-1. 如果"评价内容"字段为空（无文本），无论评价等级是什么，都输出：无评价
-2. 如果"评价内容"字段包含"默认好评"、"系统默认好评"、"用户未填写评价内容"等类似文字，都输出：默认好评
-3. 如果"评价内容"字段包含"此用户没有填写评价"，都输出：默认好评
-4. 如果"评价等级"字段为"好评"，且"评价内容"字段有具体文字内容，请根据评价内容判断具体的正面原因，如：口感好、新鲜、物流快、包装好、服务态度好等
-5. 如果"评价等级"字段为"差评"，且"评价内容"字段有具体文字内容，请根据评价内容判断具体的负面原因，如：口感差、不新鲜、物流慢、包装破损、服务态度差、缺斤少两等
-6. 如果"评价等级"字段为"中评"，请根据评价内容判断是偏正面还是偏负面的原因
-7. 请尽量输出具体、简洁的分类标签，不要输出模糊的标签如"其他"、"一般"等
-8. 输出格式要求：仅输出分类标签本身，不要添加任何解释、说明或前缀
+                            <textarea id="promptInput" class="w-full h-full flex-1 bg-white/60 border border-gray-300 rounded-lg px-3 py-2 outline-none resize-none text-gray-700 text-sm custom-scrollbar" placeholder="输入提示词..." onchange="saveConfigToDB()">你是一个专业的电商售后评价分类助手。
+你的任务：根据“评价等级”和“评价内容”，输出对应的“评价”分类。
 
-【示例】
-评价内容："很好吃，甜甜的很新鲜" → 输出：口感好、新鲜
-评价内容："物流太慢了，水果都坏了" → 输出：物流慢、腐烂变质
-评价内容："" → 输出：无评价
-评价内容："默认好评" → 输出：默认好评</textarea>
+【核心规则】
+1. 如果“评价内容”不为空，则根据“评价等级”选择对应的分类列表：
+   - 评价等级为【好评】或【中评】时，使用「好评/中评分类列表」
+   - 评价等级为【差评】时，使用「差评分类列表」
+2. 从对应分类列表中，选择唯一最匹配的一个类别。
+3. 如果无法明确匹配到任何已有类别，则输出为空。
+
+---
+
+### 好评/中评分类列表（仅用于好评、中评）
+- 口感好
+- 发货快
+- 服务好
+- 成熟度适中
+- 出肉率高/肉多
+- 果型好/饱满
+- 新鲜度高
+- 性价比高
+- 包装好
+- 品质稳定/选品好
+- 会回购
+- 味道香
+- 核小
+- 干包/湿包描述
+- 果肉颜色好
+- 物流快
+- 信任主播/直播间
+- 售后处理满意
+
+
+### 差评分类列表（仅用于差评）
+- 腐烂变质
+- 无法成熟
+- 数量不足/少发
+- 待揽收拦截单
+- 规格不符/少重
+- 商品描述不符
+- 过熟/酒味
+- 物流中断/丢件/虚假签收
+- 出肉率低
+- 夹生
+- 死包
+- 果虫
+- 烂刺/发霉
+- 畸形果
+- 挤压磕碰
+- 烧核
+- 食品安全
+- 错发/漏发
+- 罚款
+- 包裹破损
+- 揽收超时
+- 口感差
+- 生劈
+- 售后态度差/不处理
+
+
+---
+
+【输出格式】
+只输出一个类别名称，不要解释，不要加额外文字。</textarea>
                             <div class="text-xs text-gray-500">提示词会自动保存到本地数据库</div>
                         </div>
                     </div>
@@ -142,47 +192,41 @@
         </div>
 
         <!-- ================= Tab 2: 数据看板页 ================= -->
-        <div id="tab-dashboard" class="hidden flex-col gap-6 flex-1 overflow-y-auto custom-scrollbar pr-4 pb-10 relative min-w-0">
-            <div class="sticky top-0 z-20 bg-[#e8f4f0]/95 backdrop-blur-md -mx-4 px-4 py-2 shadow-sm">
+        <div id="tab-dashboard" class="hidden flex-col gap-2 flex-1 overflow-y-auto custom-scrollbar pr-4 pb-4 relative min-w-0">
+            <div class="sticky top-0 z-20 bg-[#e8f4f0]/95 backdrop-blur-md -mx-4 px-4 shadow-sm">
                 <!-- 筛选框 -->
-                <div class="glass-card rounded-2xl p-3 flex flex-wrap gap-x-5 gap-y-2 items-center shadow-sm mb-2">
-                    <div class="flex items-center gap-2"><span class="text-sm font-bold text-gray-700">门店名称:</span><select id="filterStore" class="p-1.5 rounded-lg bg-white/60 border border-gray-300 text-sm outline-none w-36" onchange="applyFilters()"><option value="">全部门店</option></select></div>
-                    <div class="flex items-center gap-2"><span class="text-sm font-bold text-gray-700">评价分类:</span><select id="filterCategory" class="p-1.5 rounded-lg bg-white/60 border border-gray-300 text-sm outline-none w-32" onchange="applyFilters()"><option value="">全部分类</option></select></div>
-                    <div class="flex items-center gap-2"><span class="text-sm font-bold text-gray-700">评价等级:</span><select id="filterLevel" class="p-1.5 rounded-lg bg-white/60 border border-gray-300 text-sm outline-none w-28" onchange="applyFilters()"><option value="">全部等级</option><option value="好评">好评</option><option value="差评">差评</option><option value="中评">中评</option></select></div>
-                    <div class="flex items-center gap-2 relative" style="z-index:9999"><span class="text-sm font-bold text-gray-700">商品名称:</span><input type="text" id="filterProduct" class="p-1.5 rounded-lg bg-white/60 border border-gray-300 text-sm outline-none w-40" placeholder="输入关键词搜索" oninput="filterProductInput()"><div id="productDropdown" class="hidden absolute top-full left-16 mt-1 w-40 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg" style="z-index:99999"></div></div>
-                    <div class="flex items-center gap-2 relative" style="z-index:9999"><span class="text-sm font-bold text-gray-700">商品规格:</span><input type="text" id="filterSpec" class="p-1.5 rounded-lg bg-white/60 border border-gray-300 text-sm outline-none w-36" placeholder="输入关键词搜索" oninput="filterSpecInput()"><div id="specDropdown" class="hidden absolute top-full left-16 mt-1 w-36 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg" style="z-index:99999"></div></div>
-                    <div class="flex items-center gap-2"><span class="text-sm font-bold text-gray-700">评价日期:</span><input type="date" id="filterDateStart" class="p-1.5 rounded-lg bg-white/60 border border-gray-300 text-sm outline-none w-32" onchange="applyFilters()"><span class="text-gray-500">-</span><input type="date" id="filterDateEnd" class="p-1.5 rounded-lg bg-white/60 border border-gray-300 text-sm outline-none w-32" onchange="applyFilters()"></div>
+                <div class="glass-card rounded-2xl p-2 flex flex-wrap gap-x-2 gap-y-1 items-center shadow-sm relative" style="z-index:100">
+                    <div class="flex items-center gap-1 relative" style="z-index:9997"><span class="text-xs font-bold text-gray-700">门店:</span><button id="storeFilterBtn" onclick="toggleDropdown('storeDropdown')" class="p-1 rounded-lg bg-white/60 border border-gray-300 text-xs outline-none w-24 text-left truncate"><span id="storeFilterText">全部门店</span></button><div id="storeDropdown" class="hidden absolute top-full left-8 mt-1 w-32 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg p-2" style="z-index:99997; transform: translateZ(0);"><div class="flex justify-between text-xs mb-1 px-1"><button onclick="checkAll('storeDropdown', true); event.stopPropagation();" class="text-blue-600 font-bold hover:underline">全选</button><button onclick="checkAll('storeDropdown', false); event.stopPropagation();" class="text-gray-500 hover:underline">清空</button></div><div id="storeOptions"></div></div></div>
+                    <div class="flex items-center gap-1 relative" style="z-index:9997"><span class="text-xs font-bold text-gray-700">分类:</span><button id="categoryFilterBtn" onclick="toggleDropdown('categoryDropdown')" class="p-1 rounded-lg bg-white/60 border border-gray-300 text-xs outline-none w-24 text-left truncate"><span id="categoryFilterText">全部分类</span></button><div id="categoryDropdown" class="hidden absolute top-full left-8 mt-1 w-32 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg p-2" style="z-index:99997; transform: translateZ(0);"><div class="flex justify-between text-xs mb-1 px-1"><button onclick="checkAll('categoryDropdown', true); event.stopPropagation();" class="text-blue-600 font-bold hover:underline">全选</button><button onclick="checkAll('categoryDropdown', false); event.stopPropagation();" class="text-gray-500 hover:underline">清空</button></div><div id="categoryOptions"></div></div></div>
+                    <div class="flex items-center gap-1 relative" style="z-index:9997"><span class="text-xs font-bold text-gray-700">等级:</span><button id="levelFilterBtn" onclick="toggleDropdown('levelDropdown')" class="p-1 rounded-lg bg-white/60 border border-gray-300 text-xs outline-none w-24 text-left truncate"><span id="levelFilterText">全部等级</span></button><div id="levelDropdown" class="hidden absolute top-full left-8 mt-1 w-32 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg p-2" style="z-index:99997; transform: translateZ(0);"><div class="flex justify-between text-xs mb-1 px-1"><button onclick="checkAll('levelDropdown', true); event.stopPropagation();" class="text-blue-600 font-bold hover:underline">全选</button><button onclick="checkAll('levelDropdown', false); event.stopPropagation();" class="text-gray-500 hover:underline">清空</button></div><div id="levelOptions"><label class="flex items-center gap-2 px-1 py-1 hover:bg-gray-50 rounded cursor-pointer text-xs"><input type="checkbox" value="好评" onchange="updateFilterText('levelDropdown', 'levelFilterText', '全部等级'); applyFilters();"><span class="truncate">好评</span></label><label class="flex items-center gap-2 px-1 py-1 hover:bg-gray-50 rounded cursor-pointer text-xs"><input type="checkbox" value="中评" onchange="updateFilterText('levelDropdown', 'levelFilterText', '全部等级'); applyFilters();"><span class="truncate">中评</span></label><label class="flex items-center gap-2 px-1 py-1 hover:bg-gray-50 rounded cursor-pointer text-xs"><input type="checkbox" value="差评" onchange="updateFilterText('levelDropdown', 'levelFilterText', '全部等级'); applyFilters();"><span class="truncate">差评</span></label></div></div></div>
+                    <div class="flex items-center gap-1 relative" style="z-index:9999"><span class="text-xs font-bold text-gray-700">商品:</span><button id="productFilterBtn" onclick="toggleDropdown('productDropdown')" class="p-1 rounded-lg bg-white/60 border border-gray-300 text-xs outline-none w-24 text-left truncate"><span id="productFilterText">全部商品</span></button><div id="productDropdown" class="hidden absolute top-full left-8 mt-1 w-40 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg p-2" style="z-index:99999; transform: translateZ(0);"><input type="text" id="productDropdownSearch" class="w-full p-1 mb-1 border rounded text-xs" placeholder="搜索..." oninput="filterDropdownOptions('productDropdownSearch','productOptions','productFilterText','全部商品')"><div class="flex justify-between text-xs mb-1 px-1"><button onclick="checkAll('productDropdown', true); event.stopPropagation();" class="text-blue-600 font-bold hover:underline">全选</button><button onclick="checkAll('productDropdown', false); event.stopPropagation();" class="text-gray-500 hover:underline">清空</button></div><div id="productOptions"></div></div></div>
+                    <div class="flex items-center gap-1 relative" style="z-index:9999"><span class="text-xs font-bold text-gray-700">规格:</span><button id="specFilterBtn" onclick="toggleDropdown('specDropdown')" class="p-1 rounded-lg bg-white/60 border border-gray-300 text-xs outline-none w-24 text-left truncate"><span id="specFilterText">全部规格</span></button><div id="specDropdown" class="hidden absolute top-full left-8 mt-1 w-40 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg p-2" style="z-index:99999; transform: translateZ(0);"><input type="text" id="specDropdownSearch" class="w-full p-1 mb-1 border rounded text-xs" placeholder="搜索..." oninput="filterDropdownOptions('specDropdownSearch','specOptions','specFilterText','全部规格')"><div class="flex justify-between text-xs mb-1 px-1"><button onclick="checkAll('specDropdown', true); event.stopPropagation();" class="text-blue-600 font-bold hover:underline">全选</button><button onclick="checkAll('specDropdown', false); event.stopPropagation();" class="text-gray-500 hover:underline">清空</button></div><div id="specOptions"></div></div></div>
+                    <div class="flex items-center gap-1 relative" style="z-index:9998"><span class="text-xs font-bold text-gray-700">省份:</span><button id="provinceFilterBtn" onclick="toggleDropdown('provinceDropdown')" class="p-1 rounded-lg bg-white/60 border border-gray-300 text-xs outline-none w-24 text-left truncate"><span id="provinceFilterText">全部省份</span></button><div id="provinceDropdown" class="hidden absolute top-full left-8 mt-1 w-32 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg p-2" style="z-index:99998; transform: translateZ(0);"><div class="flex justify-between text-xs mb-1 px-1"><button onclick="checkAll('provinceDropdown', true); event.stopPropagation();" class="text-blue-600 font-bold hover:underline">全选</button><button onclick="checkAll('provinceDropdown', false); event.stopPropagation();" class="text-gray-500 hover:underline">清空</button></div><div id="provinceOptions"></div></div></div>
+                    <div class="flex items-center gap-1 relative" style="z-index:9998"><span class="text-xs font-bold text-gray-700">仓库:</span><button id="warehouseFilterBtn" onclick="toggleDropdown('warehouseDropdown')" class="p-1 rounded-lg bg-white/60 border border-gray-300 text-xs outline-none w-24 text-left truncate"><span id="warehouseFilterText">全部仓库</span></button><div id="warehouseDropdown" class="hidden absolute top-full left-8 mt-1 w-32 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg p-2" style="z-index:99998; transform: translateZ(0);"><div class="flex justify-between text-xs mb-1 px-1"><button onclick="checkAll('warehouseDropdown', true); event.stopPropagation();" class="text-blue-600 font-bold hover:underline">全选</button><button onclick="checkAll('warehouseDropdown', false); event.stopPropagation();" class="text-gray-500 hover:underline">清空</button></div><div id="warehouseOptions"></div></div></div>
+                    <div class="flex items-center gap-1"><span class="text-xs font-bold text-gray-700">日期:</span><input type="date" id="filterDateStart" class="p-1 rounded-lg bg-white/60 border border-gray-300 text-xs outline-none w-24" onchange="applyFilters()"><span class="text-gray-500 text-xs">-</span><input type="date" id="filterDateEnd" class="p-1 rounded-lg bg-white/60 border border-gray-300 text-xs outline-none w-24" onchange="applyFilters()"></div>
                     <div class="flex gap-2">
-                        <button onclick="applyFilters()" class="bg-blue-500 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-blue-600 transition shadow-sm font-bold">
-                            <svg class="inline w-4 h-4 mr-1" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-                            查询
-                        </button>
-                        <button onclick="resetFilters()" class="bg-gray-500 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-gray-600 transition shadow-sm font-bold">
-                            <svg class="inline w-4 h-4 mr-1" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
-                            重置
-                        </button>
+                        <button onclick="applyFilters()" class="bg-blue-500 text-white px-3 py-1 rounded-lg text-xs hover:bg-blue-600 transition shadow-sm font-bold">查询</button>
+                        <button onclick="resetFilters()" class="bg-gray-500 text-white px-3 py-1 rounded-lg text-xs hover:bg-gray-600 transition shadow-sm font-bold">重置</button>
                     </div>
                     <div class="ml-auto flex gap-2">
-                        <button onclick="exportDashboardToExcel()" class="bg-green-500 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-green-600 transition shadow-sm font-bold">
-                            <svg class="inline w-4 h-4 mr-1" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-                            导出Excel
+                        <button onclick="exportDashboardToExcel()" class="bg-green-500 text-white px-3 py-1 rounded-lg text-xs hover:bg-green-600 transition shadow-sm font-bold">
+                            <svg class="inline w-3 h-3 mr-1" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>导出Excel
                         </button>
-
                     </div>
                 </div>
 
                 <!-- KPI卡片 -->
-                <div class="grid grid-cols-3 xl:grid-cols-6 gap-3 mb-2">
-                    <div class="glass-card rounded-xl p-2.5 text-center"><h3 id="kpi-total" class="text-xl font-bold text-gray-800">0</h3><p class="text-xs font-bold text-gray-600 mt-0.5">总评价数</p></div>
-                    <div class="glass-card rounded-xl p-2.5 text-center"><h3 id="kpi-good-rate" class="text-xl font-bold text-gray-800">0%</h3><p class="text-xs font-bold text-gray-600 mt-0.5">好评率</p></div>
-                    <div class="glass-card rounded-xl p-2.5 text-center"><h3 id="kpi-bad-rate" class="text-xl font-bold text-gray-800">0%</h3><p class="text-xs font-bold text-gray-600 mt-0.5">差评率</p></div>
-                    <div class="glass-card rounded-xl p-2.5 text-center"><h3 id="kpi-avg-score" class="text-xl font-bold text-gray-800">0</h3><p class="text-xs font-bold text-gray-600 mt-0.5">综合评分</p></div>
-                    <div class="glass-card rounded-xl p-2.5 text-center"><h3 id="kpi-abnormal" class="text-xl font-bold text-red-500">0</h3><p class="text-xs font-bold text-gray-600 mt-0.5">疑似水军</p></div>
-                    <div class="glass-card rounded-xl p-2.5 text-center"><h3 id="kpi-content-rate" class="text-xl font-bold text-gray-800">0%</h3><p class="text-xs font-bold text-gray-600 mt-0.5">有内容率</p></div>
+                <div class="grid grid-cols-3 xl:grid-cols-6 gap-2">
+                    <div class="glass-card rounded-xl p-2 text-center"><h3 id="kpi-total" class="text-xl font-bold text-gray-800">0</h3><p class="text-xs font-bold text-gray-600 mt-0.5">总评价数</p></div>
+                    <div class="glass-card rounded-xl p-2 text-center"><h3 id="kpi-good-rate" class="text-xl font-bold text-gray-800">0%</h3><p class="text-xs font-bold text-gray-600 mt-0.5">好评率</p></div>
+                    <div class="glass-card rounded-xl p-2 text-center"><h3 id="kpi-bad-rate" class="text-xl font-bold text-gray-800">0%</h3><p class="text-xs font-bold text-gray-600 mt-0.5">差评率</p></div>
+                    <div class="glass-card rounded-xl p-2 text-center"><h3 id="kpi-avg-score" class="text-xl font-bold text-gray-800">0</h3><p class="text-xs font-bold text-gray-600 mt-0.5">综合评分</p></div>
+                    <div class="glass-card rounded-xl p-2 text-center"><h3 id="kpi-abnormal" class="text-xl font-bold text-red-500">0</h3><p class="text-xs font-bold text-gray-600 mt-0.5">疑似水军</p></div>
+                    <div class="glass-card rounded-xl p-2 text-center"><h3 id="kpi-content-rate" class="text-xl font-bold text-gray-800">0%</h3><p class="text-xs font-bold text-gray-600 mt-0.5">有内容率</p></div>
                 </div>
 
                 <!-- 快捷跳转 -->
-                <div class="flex justify-center gap-6 text-sm font-bold text-blue-600 bg-white/40 py-2 rounded-xl shadow-sm">
+                <div class="flex justify-center gap-6 text-sm font-bold text-blue-600 bg-white/40 py-1 rounded-xl shadow-sm">
                     <a href="javascript:void(0)" onclick="scrollToSection('section-overview')" class="hover:text-blue-800 transition">
                         <svg class="inline w-4 h-4 mr-1" viewBox="0 0 24 24" fill="currentColor"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg>
                         总体概览
@@ -206,36 +250,36 @@
                 </div>
             </div>
 
-            <div id="section-overview" class="grid grid-cols-4 gap-4 pt-2">
-                <div class="glass-card rounded-2xl p-4"><h3 class="text-sm font-bold text-gray-800 mb-4 text-center">评价等级分布</h3><div class="h-48 relative w-full"><canvas id="levelDistChart"></canvas></div></div>
-                <div class="glass-card rounded-2xl p-4"><h3 class="text-sm font-bold text-gray-800 mb-4 text-center">评分星级分布</h3><div class="h-48 relative w-full"><canvas id="scoreDistChart"></canvas></div></div>
-                <div class="glass-card rounded-2xl p-4 flex flex-col justify-center" style="max-height: 260px;">
-                    <h3 class="text-sm font-bold text-gray-800 mb-4 text-center">评价分类分布</h3>
-                    <div id="categoryDistContainer" class="space-y-3 px-2 mt-2 overflow-y-auto custom-scrollbar" style="max-height: 180px;"><div class="text-center text-xs text-gray-400 mt-10">暂无分类数据</div></div>
+            <div id="section-overview" class="flex flex-col gap-3 pt-1">
+                <div class="grid grid-cols-4 gap-3" style="height: 220px;">
+                    <div class="glass-card rounded-2xl p-3 flex flex-col overflow-hidden"><h3 class="text-sm font-bold text-gray-800 mb-2 text-center shrink-0">评价等级分布</h3><div class="flex-1 relative w-full min-h-0 overflow-hidden"><canvas id="levelDistChart"></canvas></div></div>
+                    <div class="glass-card rounded-2xl p-3 flex flex-col overflow-hidden"><h3 class="text-sm font-bold text-gray-800 mb-2 text-center shrink-0">评分星级分布</h3><div class="flex-1 relative w-full min-h-0 overflow-hidden"><canvas id="scoreDistChart"></canvas></div></div>
+                    <div class="glass-card rounded-2xl p-3 flex flex-col overflow-hidden" style="height: 220px;">
+                        <h3 class="text-sm font-bold text-gray-800 mb-2 text-center shrink-0">评价分类分布</h3>
+                        <div id="categoryDistContainer" class="space-y-2 px-2 mt-1 overflow-y-auto custom-scrollbar flex-1"><div class="text-center text-xs text-gray-400 mt-10">暂无分类数据</div></div>
+                    </div>
+                    <div class="glass-card rounded-2xl p-3 flex flex-col overflow-hidden"><h3 class="text-sm font-bold text-gray-800 mb-1 text-center shrink-0">各店铺好评率 vs 差评率</h3><div class="flex-1 relative w-full min-h-0 overflow-hidden"><canvas id="shopCompareChart"></canvas></div></div>
                 </div>
-                <div class="glass-card rounded-2xl p-4"><h3 class="text-sm font-bold text-gray-800 mb-2 text-center">各店铺好评率 vs 差评率</h3><div class="h-48 relative w-full"><canvas id="shopCompareChart"></canvas></div></div>
-            </div>
-
-            <div id="section-trend" class="grid grid-cols-2 gap-6 pt-4">
-                <div class="glass-card rounded-2xl p-5"><h3 class="text-md font-bold text-gray-800 mb-4 text-center">每日评价等级堆叠</h3><div class="h-56 relative w-full"><canvas id="dailyLevelStackChart"></canvas></div></div>
-                <div class="glass-card rounded-2xl p-5"><h3 class="text-md font-bold text-gray-800 mb-4 text-center">每日差评趋势</h3><div class="h-56 relative w-full"><canvas id="dailyBadTrendChart"></canvas></div></div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-6 pt-4">
-                <div class="glass-card rounded-2xl p-5"><h3 class="text-md font-bold text-gray-800 mb-4 text-center">商品名称好评分布</h3><div class="h-56 relative w-full overflow-y-auto custom-scrollbar"><canvas id="productGoodChart"></canvas></div></div>
-                <div class="glass-card rounded-2xl p-5"><h3 class="text-md font-bold text-gray-800 mb-4 text-center">商品名称差评分布</h3><div class="h-56 relative w-full overflow-y-auto custom-scrollbar"><canvas id="productBadChart"></canvas></div></div>
-            </div>
-
-            <div class="grid grid-cols-2 gap-6 pt-4">
-                <div class="glass-card rounded-2xl p-5"><h3 class="text-md font-bold text-gray-800 mb-4 text-center">商品规格好评分布</h3><div class="h-56 relative w-full overflow-y-auto custom-scrollbar"><canvas id="specGoodChart"></canvas></div></div>
-                <div class="glass-card rounded-2xl p-5"><h3 class="text-md font-bold text-gray-800 mb-4 text-center">商品规格差评分布</h3><div class="h-56 relative w-full overflow-y-auto custom-scrollbar"><canvas id="specBadChart"></canvas></div></div>
-            </div>
-
-            <div id="section-keyword" class="glass-card rounded-2xl p-5 pt-4 mt-4">
-                <div class="grid grid-cols-2 gap-8">
-                    <div><h3 class="text-md font-bold text-gray-800 mb-4 text-center">正面关键词频率</h3><div class="h-80 relative w-full overflow-y-auto custom-scrollbar"><canvas id="positiveKeywordChart"></canvas></div></div>
-                    <div><h3 class="text-md font-bold text-gray-800 mb-4 text-center">负面关键词频率</h3><div class="h-80 relative w-full overflow-y-auto custom-scrollbar"><canvas id="negativeKeywordChart"></canvas></div></div>
+                <div class="grid grid-cols-4 gap-3" style="height: 220px;">
+                    <div class="glass-card rounded-2xl p-2 flex flex-col overflow-hidden"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center shrink-0">好评省份分布</h3><div class="flex-1 relative w-full min-h-0 overflow-hidden" id="provinceGoodMap"></div></div>
+                    <div class="glass-card rounded-2xl p-2 flex flex-col overflow-hidden"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center shrink-0">差评省份分布</h3><div class="flex-1 relative w-full min-h-0 overflow-hidden" id="provinceBadMap"></div></div>
+                    <div class="glass-card rounded-2xl p-2 flex flex-col overflow-hidden"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center shrink-0">好评发货仓库占比</h3><div class="flex-1 relative w-full min-h-0 overflow-hidden"><canvas id="warehouseGoodChart"></canvas></div></div>
+                    <div class="glass-card rounded-2xl p-2 flex flex-col overflow-hidden"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center shrink-0">差评发货仓库占比</h3><div class="flex-1 relative w-full min-h-0 overflow-hidden"><canvas id="warehouseBadChart"></canvas></div></div>
                 </div>
+            </div>
+
+            <div class="grid grid-cols-4 gap-3 pt-3" style="height: 220px;">
+                <div class="glass-card rounded-2xl p-2 flex flex-col overflow-hidden"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center shrink-0">每日评价等级趋势</h3><div class="flex-1 relative w-full min-h-0 overflow-hidden"><canvas id="dailyLevelStackChart"></canvas></div></div>
+                <div class="glass-card rounded-2xl p-2 flex flex-col overflow-hidden"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center shrink-0">每日差评趋势</h3><div class="flex-1 relative w-full min-h-0 overflow-hidden"><canvas id="dailyBadTrendChart"></canvas></div></div>
+                <div id="section-keyword" class="glass-card rounded-2xl p-2 flex flex-col"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center shrink-0">正面关键词频率</h3><div class="flex-1 relative w-full min-h-0 overflow-y-auto custom-scrollbar"><canvas id="positiveKeywordChart"></canvas></div></div>
+                <div class="glass-card rounded-2xl p-2 flex flex-col"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center shrink-0">负面关键词频率</h3><div class="flex-1 relative w-full min-h-0 overflow-y-auto custom-scrollbar"><canvas id="negativeKeywordChart"></canvas></div></div>
+            </div>
+
+            <div class="grid grid-cols-4 gap-3 pt-3">
+                <div class="glass-card rounded-2xl p-2"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center">商品名称好评分布</h3><div class="h-48 relative w-full overflow-y-auto custom-scrollbar"><canvas id="productGoodChart"></canvas></div></div>
+                <div class="glass-card rounded-2xl p-2"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center">商品名称差评分布</h3><div class="h-48 relative w-full overflow-y-auto custom-scrollbar"><canvas id="productBadChart"></canvas></div></div>
+                <div class="glass-card rounded-2xl p-2"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center">商品规格好评分布</h3><div class="h-48 relative w-full overflow-y-auto custom-scrollbar"><canvas id="specGoodChart"></canvas></div></div>
+                <div class="glass-card rounded-2xl p-2"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center">商品规格差评分布</h3><div class="h-48 relative w-full overflow-y-auto custom-scrollbar"><canvas id="specBadChart"></canvas></div></div>
             </div>
 
             <div id="section-abnormal" class="glass-card rounded-2xl p-5 border border-red-200 pt-4 mt-4">
@@ -269,13 +313,13 @@
                         <thead>
                             <tr>
                                 <th class="w-10"><input type="checkbox" id="selectAll" onclick="toggleSelectAll()"></th>
-                                <th>用户昵称</th><th>评价日期</th><th>订单ID</th><th>商品ID</th>
+                                <th>用户昵称</th><th>评价日期</th><th>省份</th><th>地址</th><th>发货仓库</th><th>订单ID</th><th>商品ID</th>
                                 <th>商品名称</th><th>商品规格</th><th>评价得分</th><th>评价内容</th>
                                 <th>评价分类</th><th>评价等级</th><th>追评内容</th><th>追评时间</th>
                                 <th>商家回复</th><th>门店ID</th><th>门店名称</th>
                             </tr>
                         </thead>
-                        <tbody id="dashboardTableBody"><tr><td colspan="16" class="text-center text-gray-400">请先在基础操作页刷入数据</td></tr></tbody>
+                        <tbody id="dashboardTableBody"><tr><td colspan="19" class="text-center text-gray-400">请先在基础操作页刷入数据</td></tr></tbody>
                     </table>
                 </div>
                 <div class="flex justify-between items-center mt-4">
@@ -311,6 +355,8 @@
     let globalExcelData = []; 
     let configuredStores = [];
     let chartInstances = {};
+    let mapInstances = {};
+    let chinaGeoJson = null;
     let dashboardRendered = false;
     let db = null;
     let SQL = null;
@@ -345,6 +391,9 @@
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_name TEXT,
                 review_date TEXT,
+                province TEXT,
+                address TEXT,
+                warehouse TEXT,
                 order_id TEXT,
                 product_id TEXT,
                 product_name TEXT,
@@ -393,10 +442,17 @@
             const apiRes = db.exec(`SELECT value FROM config WHERE key = 'api_key'`);
             if (apiRes.length > 0 && apiRes[0].values.length > 0) {
                 document.getElementById('apiKeyInput').value = apiRes[0].values[0][0];
+            } else {
+                const defaultApiKey = 'sk-752472796e4c4eb2ab443c764552fb24';
+                document.getElementById('apiKeyInput').value = defaultApiKey;
+                db.run(`INSERT OR REPLACE INTO config (key, value) VALUES ('api_key', ?)`, [defaultApiKey]);
             }
             const promptRes = db.exec(`SELECT value FROM config WHERE key = 'prompt'`);
             if (promptRes.length > 0 && promptRes[0].values.length > 0) {
                 document.getElementById('promptInput').value = promptRes[0].values[0][0];
+            } else {
+                const defaultPrompt = document.getElementById('promptInput').value;
+                db.run(`INSERT OR REPLACE INTO config (key, value) VALUES ('prompt', ?)`, [defaultPrompt]);
             }
             const storeRes = db.exec(`SELECT name FROM stores ORDER BY id`);
             if (storeRes.length > 0) {
@@ -445,8 +501,8 @@
         if (!db || data.length === 0) return;
         const stmt = db.prepare(`
             INSERT OR IGNORE INTO reviews 
-            (user_name, review_date, order_id, product_id, product_name, product_spec, score, content, category, level, append_content, append_time, merchant_reply, store_id, store_name)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (user_name, review_date, province, address, warehouse, order_id, product_id, product_name, product_spec, score, content, category, level, append_content, append_time, merchant_reply, store_id, store_name)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         db.run('BEGIN TRANSACTION');
         data.forEach(row => {
@@ -454,6 +510,9 @@
                 stmt.run([
                     row['用户昵称'] || '',
                     row['评价日期'] || '',
+                    row['省份'] || '',
+                    row['地址'] || '',
+                    row['发货仓库'] || '',
                     row['订单ID'] || '',
                     row['商品ID'] || '',
                     row['商品名称'] || '',
@@ -485,6 +544,9 @@
                 if (c === 'score') obj['商品评价得分'] = v[i];
                 else if (c === 'user_name') obj['用户昵称'] = v[i];
                 else if (c === 'review_date') obj['评价日期'] = v[i];
+                else if (c === 'province') obj['省份'] = v[i];
+                else if (c === 'address') obj['地址'] = v[i];
+                else if (c === 'warehouse') obj['发货仓库'] = v[i];
                 else if (c === 'order_id') obj['订单ID'] = v[i];
                 else if (c === 'product_id') obj['商品ID'] = v[i];
                 else if (c === 'product_name') obj['商品名称'] = v[i];
@@ -614,6 +676,9 @@
     function getRowHtml(row, index) {
         const userName = row['用户昵称'] || '-';
         const date = String(row['评价日期'] || '-').substring(0, 10);
+        const province = row['省份'] || '-';
+        const address = row['地址'] || '-';
+        const warehouse = row['发货仓库'] || '-';
         const orderId = row['订单ID'] || '-';
         const prodId = row['商品ID'] || '-';
         const productName = row['商品名称'] || '-';
@@ -636,7 +701,7 @@
         return '<tr>' +
             '<td><input type="checkbox" name="reviewSelect" value="' + orderId + '" data-index="' + index + '"></td>' +
             '<td><div class="truncate max-w-[80px]" title="' + userName + '">' + userName + '</div></td>' +
-            '<td>' + date + '</td><td>' + orderId + '</td><td>' + prodId + '</td>' +
+            '<td>' + date + '</td><td>' + province + '</td><td>' + address + '</td><td>' + warehouse + '</td><td>' + orderId + '</td><td>' + prodId + '</td>' +
             '<td><div class="truncate max-w-[100px]" title="' + productName + '">' + productName + '</div></td>' +
             '<td><div class="truncate max-w-[80px]" title="' + spec + '">' + spec + '</div></td>' +
             '<td>' + score + '</td>' +
@@ -655,7 +720,7 @@
         if (data.length === 0) { container.innerHTML = '<div class="text-gray-400 text-sm text-center mt-10">暂无数据</div>'; return; }
         
         let tableHtml = '<table class="w-full glass-table border-collapse whitespace-nowrap min-w-max"><thead><tr>' +
-            '<th>用户昵称</th><th>评价日期</th><th>订单ID</th><th>商品ID</th>' +
+            '<th class="w-8"></th><th>用户昵称</th><th>评价日期</th><th>省份</th><th>地址</th><th>发货仓库</th><th>订单ID</th><th>商品ID</th>' +
             '<th>商品名称</th><th>商品规格</th><th>评价得分</th><th>评价内容</th>' +
             '<th>评价分类</th><th>评价等级</th><th>追评内容</th><th>追评时间</th>' +
             '<th>商家回复</th><th>门店ID</th><th>门店名称</th></tr></thead><tbody>';
@@ -697,7 +762,24 @@
                 appendLog('去重完成！当前剩余有效数据: ' + globalExcelData.length + ' 条', 'success');
                 appendLog('正在校验并新增【评价分类】字段...');
                 globalExcelData.forEach(row => { if (!row.hasOwnProperty('评价分类')) row['评价分类'] = ''; });
-                
+
+                appendLog('正在从地址中提取省份信息...');
+                let provinceExtracted = 0;
+                globalExcelData.forEach(row => {
+                    const addr = String(row['地址'] || '').trim();
+                    if (addr && !String(row['省份'] || '').trim()) {
+                        const parts = addr.split(/\s+/);
+                        if (parts.length > 0) {
+                            let province = parts[0];
+                            // 直辖市补全
+                            if (['北京','上海','天津','重庆'].includes(province)) province += '市';
+                            row['省份'] = province;
+                            provinceExtracted++;
+                        }
+                    }
+                });
+                appendLog('省份提取完成！共填充 ' + provinceExtracted + ' 条', 'success');
+
                 setTimeout(() => {
                     appendLog('等待用户选择门店名称进行数据填充...');
                     document.getElementById('preprocessAction').classList.remove('hidden');
@@ -827,10 +909,99 @@
         }, 1500);
     }
 
+    const dataLabelPlugin = {
+        id: 'dataLabelPlugin',
+        afterDatasetsDraw(chart) {
+            if(chart.config.type === 'line') return;
+            const {ctx} = chart;
+            chart.data.datasets.forEach((dataset, i) => {
+                const meta = chart.getDatasetMeta(i);
+                if(meta.hidden) return;
+                const total = dataset.data.reduce((a,b)=> (a||0)+(b||0), 0);
+                meta.data.forEach((element, index) => {
+                    const value = dataset.data[index];
+                    if(value === 0 || value == null) return;
+                    let label = value;
+                    if(chart.config.type === 'doughnut' || chart.config.type === 'pie') {
+                        if(total === 0) return;
+                        label = ((value / total) * 100).toFixed(1) + '%';
+                    }
+                    const pos = element.tooltipPosition();
+                    ctx.save();
+                    ctx.fillStyle = '#333';
+                    ctx.font = 'bold 10px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    if(chart.config.type === 'bar' || chart.config.type === 'line') {
+                        const isHorizontal = chart.options.indexAxis === 'y';
+                        if(isHorizontal) {
+                            ctx.textAlign = 'left';
+                            ctx.fillText(label, pos.x + 4, pos.y);
+                        } else {
+                            ctx.textBaseline = 'bottom';
+                            ctx.fillText(label, pos.x, pos.y - 2);
+                        }
+                    } else {
+                        // 只在占比大于5%时显示，避免重叠
+                        if(chart.config.type === 'doughnut' && value/total <= 0.05) { ctx.restore(); return; }
+                        ctx.fillText(label, pos.x, pos.y);
+                    }
+                    ctx.restore();
+                });
+            });
+        }
+    };
     function createChart(id, config) {
         if(chartInstances[id]) chartInstances[id].destroy();
+        if(!config.options) config.options = {};
+        if(!config.options.plugins) config.options.plugins = {};
+        config.options.plugins.dataLabelPlugin = true;
+        if(!config.plugins) config.plugins = [dataLabelPlugin];
+        else if(!config.plugins.includes(dataLabelPlugin)) config.plugins.push(dataLabelPlugin);
         chartInstances[id] = new Chart(document.getElementById(id).getContext('2d'), config);
     }
+
+    async function initProvinceMap(containerId, data, total, colorRange) {
+        const dom = document.getElementById(containerId);
+        if(!dom) return;
+        if(mapInstances[containerId]) { mapInstances[containerId].dispose(); }
+        if(!chinaGeoJson) {
+            try { chinaGeoJson = await (await fetch('https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json')).json(); }
+            catch(e) { console.warn('地图数据加载失败', e); return; }
+        }
+        echarts.registerMap('china', chinaGeoJson);
+        const chart = echarts.init(dom);
+        mapInstances[containerId] = chart;
+        const maxVal = data.length ? Math.max(...data.map(d => d.value)) : 0;
+        chart.setOption({
+            tooltip: {
+                trigger: 'item',
+                formatter: function(p) {
+                    if(!p.value && p.value !== 0) return p.name;
+                    const pct = total ? ((p.value / total) * 100).toFixed(1) : '0.0';
+                    return p.name + '<br/>数量: ' + p.value + '<br/>占比: ' + pct + '%';
+                }
+            },
+            visualMap: {
+                min: 0, max: maxVal || 1,
+                left: 'left', bottom: '0',
+                text: ['高','低'],
+                inRange: { color: colorRange },
+                textStyle: { fontSize: 10 }
+            },
+            series: [{
+                name: '省份分布', type: 'map', map: 'china',
+                roam: false, zoom: 1.35, layoutCenter: ['50%', '55%'], layoutSize: '92%',
+                label: { show: false },
+                emphasis: { label: { show: true, fontSize: 10 } },
+                data: data
+            }]
+        });
+    }
+
+    window.addEventListener('resize', () => {
+        Object.values(mapInstances).forEach(chart => chart && chart.resize());
+    });
 
     function scrollToSection(sectionId) {
         const section = document.getElementById(sectionId);
@@ -849,7 +1020,7 @@
 
     function renderDashboard(data) {
         filteredDashboardData = data;
-        let agg = { total: data.length, scores: {1:0,2:0,3:0,4:0,5:0}, levels: {good:0,mid:0,bad:0}, scoreSum: 0, contentCount: 0, cats: {}, stores: {}, specs: {}, daily: {}, users: {} };
+        let agg = { total: data.length, scores: {1:0,2:0,3:0,4:0,5:0}, levels: {good:0,mid:0,bad:0}, scoreSum: 0, contentCount: 0, cats: {}, stores: {}, specs: {}, daily: {}, users: {}, provinces: {good: {}, bad: {}}, warehouses: {good: {}, bad: {}} };
         const storeSet = new Set();
         const catSet = new Set();
         
@@ -906,6 +1077,18 @@
                 if(lvl.includes('好评')) agg.users[user].good++;
                 if(lvl.includes('差评')) agg.users[user].bad++;
             }
+
+            let province = String(row['省份'] || '').trim();
+            if(province && province !== '-') {
+                if(lvl.includes('好评')) agg.provinces.good[province] = (agg.provinces.good[province] || 0) + 1;
+                if(lvl.includes('差评')) agg.provinces.bad[province] = (agg.provinces.bad[province] || 0) + 1;
+            }
+
+            let warehouse = String(row['发货仓库'] || '').trim();
+            if(warehouse && warehouse !== '-') {
+                if(lvl.includes('好评')) agg.warehouses.good[warehouse] = (agg.warehouses.good[warehouse] || 0) + 1;
+                if(lvl.includes('差评')) agg.warehouses.bad[warehouse] = (agg.warehouses.bad[warehouse] || 0) + 1;
+            }
         });
 
         document.getElementById('kpi-total').innerText = agg.total;
@@ -919,12 +1102,18 @@
 
         renderTablePage();
 
-        const storeSelect = document.getElementById('filterStore');
-        const catSelect = document.getElementById('filterCategory');
-        storeSelect.innerHTML = '<option value="">全部门店</option>' + Array.from(storeSet).map(s => '<option value="' + s + '">' + s + '</option>').join('');
-        catSelect.innerHTML = '<option value="">全部分类</option>' + Array.from(catSet).map(c => '<option value="' + c + '">' + c + '</option>').join('');
+        fillMultiSelect('storeOptions', 'storeDropdown', 'storeFilterText', Array.from(storeSet).sort(), '全部门店');
+        fillMultiSelect('categoryOptions', 'categoryDropdown', 'categoryFilterText', Array.from(catSet).sort(), '全部分类');
+        const provinceSet = new Set(Object.keys(agg.provinces.good).concat(Object.keys(agg.provinces.bad)));
+        const warehouseSet = new Set(Object.keys(agg.warehouses.good).concat(Object.keys(agg.warehouses.bad)));
+        fillMultiSelect('provinceOptions', 'provinceDropdown', 'provinceFilterText', Array.from(provinceSet).sort(), '全部省份');
+        fillMultiSelect('warehouseOptions', 'warehouseDropdown', 'warehouseFilterText', Array.from(warehouseSet).sort(), '全部仓库');
+        const productSet = new Set(data.map(row => String(row['商品名称']||'')).filter(Boolean));
+        const specSet = new Set(data.map(row => String(row['商品规格']||'')).filter(Boolean));
+        fillMultiSelect('productOptions', 'productDropdown', 'productFilterText', Array.from(productSet).sort(), '全部商品');
+        fillMultiSelect('specOptions', 'specDropdown', 'specFilterText', Array.from(specSet).sort(), '全部规格');
 
-        createChart('levelDistChart', { type: 'doughnut', data: { labels: ['好评', '中评', '差评'], datasets: [{ data: [agg.levels.good, agg.levels.mid, agg.levels.bad], backgroundColor: ['#4db6ac', '#ffd54f', '#ff8a65'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } } });
+        createChart('levelDistChart', { type: 'doughnut', data: { labels: ['好评', '中评', '差评'], datasets: [{ data: [agg.levels.good, agg.levels.mid, agg.levels.bad], backgroundColor: ['#4db6ac', '#ffd54f', '#ff8a65'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'left', labels: { boxWidth: 8, font: { size: 9 }, padding: 4 } } } } });
         createChart('scoreDistChart', { type: 'bar', data: { labels: ['1星', '2星', '3星', '4星', '5星'], datasets: [{ data: [agg.scores[1], agg.scores[2], agg.scores[3], agg.scores[4], agg.scores[5]], backgroundColor: ['#ff4d4f', '#ff9800', '#ffc107', '#8bc34a', '#4caf50'], borderRadius: 6 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } } } } });
 
         let sortedCats = Object.entries(agg.cats).sort((a,b)=>b[1]-a[1]);
@@ -941,7 +1130,7 @@
         const storeLabels = Object.keys(agg.stores);
         const storeGoodRates = storeLabels.map(s => agg.stores[s].total ? ((agg.stores[s].good / agg.stores[s].total) * 100).toFixed(1) : 0);
         const storeBadRates = storeLabels.map(s => agg.stores[s].total ? ((agg.stores[s].bad / agg.stores[s].total) * 100).toFixed(1) : 0);
-        createChart('shopCompareChart', { type: 'bar', data: { labels: storeLabels.length ? storeLabels : ['暂无数据'], datasets: [ { label: '好评率%', data: storeLabels.length ? storeGoodRates : [0], backgroundColor: '#1abc9c', borderRadius: 4 }, { label: '差评率%', data: storeLabels.length ? storeBadRates : [0], backgroundColor: '#e74c3c', borderRadius: 4 } ] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { x: { grid: { display: false } } } } });
+        createChart('shopCompareChart', { type: 'bar', data: { labels: storeLabels.length ? storeLabels : ['暂无数据'], datasets: [ { label: '好评率%', data: storeLabels.length ? storeGoodRates : [0], backgroundColor: '#1abc9c', borderRadius: 4 }, { label: '差评率%', data: storeLabels.length ? storeBadRates : [0], backgroundColor: '#e74c3c', borderRadius: 4 } ] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'left', labels: { boxWidth: 8, font: { size: 9 }, padding: 4 } } }, scales: { x: { grid: { display: false } } } } });
 
         const productLabels = Object.keys(agg.products || {});
         createChart('productGoodChart', { type: 'bar', data: { labels: productLabels.length ? productLabels : ['暂无'], datasets: [{ label: '好评数', data: productLabels.length ? productLabels.map(s => agg.products[s].good) : [0], backgroundColor: '#42a5f5', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { display: false } } } } });
@@ -952,8 +1141,19 @@
         createChart('specBadChart', { type: 'bar', data: { labels: specLabels.length ? specLabels : ['暂无'], datasets: [{ label: '差评数', data: specLabels.length ? specLabels.map(s => agg.specs[s].bad) : [0], backgroundColor: '#ff9800', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { display: false } } } } });
 
         const sortedDates = Object.keys(agg.daily).sort();
-        createChart('dailyLevelStackChart', { type: 'bar', data: { labels: sortedDates.length ? sortedDates : ['暂无'], datasets: [ { label: '好评', data: sortedDates.length ? sortedDates.map(d => agg.daily[d].good) : [0], backgroundColor: '#6ccb2d' }, { label: '中评', data: sortedDates.length ? sortedDates.map(d => agg.daily[d].mid) : [0], backgroundColor: '#ffc107' }, { label: '差评', data: sortedDates.length ? sortedDates.map(d => agg.daily[d].bad) : [0], backgroundColor: '#ff4d4f' } ] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true } }, plugins: { legend: { position: 'bottom' } } } });
+        createChart('dailyLevelStackChart', { type: 'line', data: { labels: sortedDates.length ? sortedDates : ['暂无'], datasets: [ { label: '好评', data: sortedDates.length ? sortedDates.map(d => agg.daily[d].good) : [0], borderColor: '#6ccb2d', backgroundColor: 'rgba(108,203,45,0.1)', fill: true, tension: 0.4 }, { label: '中评', data: sortedDates.length ? sortedDates.map(d => agg.daily[d].mid) : [0], borderColor: '#ffc107', backgroundColor: 'rgba(255,193,7,0.1)', fill: true, tension: 0.4 }, { label: '差评', data: sortedDates.length ? sortedDates.map(d => agg.daily[d].bad) : [0], borderColor: '#ff4d4f', backgroundColor: 'rgba(255,77,79,0.1)', fill: true, tension: 0.4 } ] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false } } }, plugins: { legend: { position: 'left', labels: { boxWidth: 8, font: { size: 9 }, padding: 4 } } } } });
         createChart('dailyBadTrendChart', { type: 'line', data: { labels: sortedDates.length ? sortedDates : ['暂无'], datasets: [{ label: '差评数', data: sortedDates.length ? sortedDates.map(d => agg.daily[d].bad) : [0], borderColor: '#ff4d4f', backgroundColor: 'rgba(255, 77, 79, 0.1)', fill: true, tension: 0.4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } } } } });
+
+        const provinceGoodData = Object.entries(agg.provinces.good).map(([name, value]) => ({name, value}));
+        const provinceBadData = Object.entries(agg.provinces.bad).map(([name, value]) => ({name, value}));
+        initProvinceMap('provinceGoodMap', provinceGoodData, agg.levels.good, ['#e0f2f1','#004d40']);
+        initProvinceMap('provinceBadMap', provinceBadData, agg.levels.bad, ['#ffccbc','#bf360c']);
+
+        const pieColors = ['#4db6ac','#26a69a','#00796b','#80cbc4','#a7ffeb','#64ffda','#00897b','#00695c','#004d40','#009688','#00bfa5','#1de9b6','#00acc1','#26c6da','#4dd0e1'];
+        const whGoodLabels = Object.keys(agg.warehouses.good);
+        const whBadLabels = Object.keys(agg.warehouses.bad);
+        createChart('warehouseGoodChart', { type: 'doughnut', data: { labels: whGoodLabels.length ? whGoodLabels : ['暂无'], datasets: [{ data: whGoodLabels.length ? whGoodLabels.map(w => agg.warehouses.good[w]) : [0], backgroundColor: pieColors }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'left', labels: { boxWidth: 8, font: { size: 9 }, padding: 4 } } } } });
+        createChart('warehouseBadChart', { type: 'doughnut', data: { labels: whBadLabels.length ? whBadLabels : ['暂无'], datasets: [{ data: whBadLabels.length ? whBadLabels.map(w => agg.warehouses.bad[w]) : [0], backgroundColor: pieColors.slice().reverse() }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'left', labels: { boxWidth: 8, font: { size: 9 }, padding: 4 } } } } });
 
         const posKeywords = {'甜':0,'香':0,'新鲜':0,'糯':0,'满意':0,'好吃':0,'不错':0,'推荐':0,'棒':0,'赞':0};
         const negKeywords = {'小':0,'硬':0,'苦':0,'不好吃':0,'生的':0,'烂':0,'差':0,'慢':0,'坏':0,'失望':0};
@@ -987,7 +1187,7 @@
             tableHtml += getRowHtml(row, start + i);
         });
 
-        document.getElementById('dashboardTableBody').innerHTML = tableHtml || '<tr><td colspan="16" class="text-center text-gray-400">暂无数据</td></tr>';
+        document.getElementById('dashboardTableBody').innerHTML = tableHtml || '<tr><td colspan="19" class="text-center text-gray-400">暂无数据</td></tr>';
         document.getElementById('currentPage').innerText = currentPage;
         document.getElementById('totalPages').innerText = totalPages;
         document.getElementById('totalRecords').innerText = total;
@@ -1074,21 +1274,79 @@
         showToast('导出选中数据成功', 'success');
     }
 
+    function toggleDropdown(id) {
+        const el = document.getElementById(id);
+        const isHidden = el.classList.contains('hidden');
+        ['provinceDropdown','warehouseDropdown','storeDropdown','categoryDropdown','levelDropdown','productDropdown','specDropdown'].forEach(d => {
+            const dd = document.getElementById(d);
+            if(dd) dd.classList.add('hidden');
+        });
+        if(isHidden) el.classList.remove('hidden');
+    }
+    function filterDropdownOptions(searchId, optionsId, textId, defaultText) {
+        const keyword = document.getElementById(searchId).value.trim().toLowerCase();
+        const labels = document.getElementById(optionsId).querySelectorAll('label');
+        labels.forEach(label => {
+            const text = label.querySelector('span').innerText.toLowerCase();
+            label.style.display = text.includes(keyword) ? '' : 'none';
+        });
+        updateFilterText(optionsId.replace('Options','Dropdown'), textId, defaultText);
+    }
+    function getCheckedValues(dropdownId) {
+        const container = document.getElementById(dropdownId);
+        return Array.from(container.querySelectorAll('input[type="checkbox"]')).filter(cb => cb.checked && cb.value).map(cb => cb.value);
+    }
+    function updateFilterText(dropdownId, textId, defaultText) {
+        const values = getCheckedValues(dropdownId);
+        const textEl = document.getElementById(textId);
+        if(values.length === 0) textEl.innerText = defaultText;
+        else if(values.length === 1) textEl.innerText = values[0];
+        else textEl.innerText = '已选' + values.length + '项';
+    }
+    function checkAll(dropdownId, checked) {
+        const container = document.getElementById(dropdownId);
+        container.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = checked);
+        const textMap = {
+            'provinceDropdown': ['provinceFilterText', '全部省份'],
+            'warehouseDropdown': ['warehouseFilterText', '全部仓库'],
+            'storeDropdown': ['storeFilterText', '全部门店'],
+            'categoryDropdown': ['categoryFilterText', '全部分类'],
+            'levelDropdown': ['levelFilterText', '全部等级'],
+            'productDropdown': ['productFilterText', '全部商品'],
+            'specDropdown': ['specFilterText', '全部规格']
+        };
+        if(textMap[dropdownId]) updateFilterText(dropdownId, textMap[dropdownId][0], textMap[dropdownId][1]);
+        applyFilters();
+    }
+    function fillMultiSelect(optionsId, dropdownId, textId, items, defaultText) {
+        const container = document.getElementById(optionsId);
+        const prevChecked = new Set(getCheckedValues(dropdownId));
+        container.innerHTML = items.map(item => {
+            const val = item.replace(/"/g, '&quot;');
+            return '<label class="flex items-center gap-2 px-1 py-1 hover:bg-gray-50 rounded cursor-pointer text-xs"><input type="checkbox" value="' + val + '" ' + (prevChecked.has(item) ? 'checked' : '') + ' onchange="updateFilterText(\'' + dropdownId + '\', \'' + textId + '\', \'' + defaultText + '\'); applyFilters();"><span class="truncate">' + item + '</span></label>';
+        }).join('');
+        updateFilterText(dropdownId, textId, defaultText);
+    }
+
     function applyFilters() {
         currentPage = 1;
-        const store = document.getElementById('filterStore').value;
-        const cat = document.getElementById('filterCategory').value;
-        const level = document.getElementById('filterLevel').value;
-        const product = document.getElementById('filterProduct').value.trim();
-        const spec = document.getElementById('filterSpec').value.trim();
         const dateStart = document.getElementById('filterDateStart').value;
         const dateEnd = document.getElementById('filterDateEnd').value;
+        const selectedStores = getCheckedValues('storeDropdown');
+        const selectedCats = getCheckedValues('categoryDropdown');
+        const selectedLevels = getCheckedValues('levelDropdown');
+        const selectedProducts = getCheckedValues('productDropdown');
+        const selectedSpecs = getCheckedValues('specDropdown');
+        const selectedProvinces = getCheckedValues('provinceDropdown');
+        const selectedWarehouses = getCheckedValues('warehouseDropdown');
         let filtered = currentDashboardData.filter(row => {
-            if(store && String(row['门店名称']||'') !== store) return false;
-            if(cat && String(row['评价分类']||'') !== cat) return false;
-            if(level && !String(row['评价等级']||'').includes(level)) return false;
-            if(product && !String(row['商品名称']||'').includes(product)) return false;
-            if(spec && !String(row['商品规格']||'').includes(spec)) return false;
+            if(selectedStores.length > 0 && !selectedStores.includes(String(row['门店名称']||''))) return false;
+            if(selectedCats.length > 0 && !selectedCats.includes(String(row['评价分类']||''))) return false;
+            if(selectedLevels.length > 0 && !selectedLevels.some(l => String(row['评价等级']||'').includes(l))) return false;
+            if(selectedProducts.length > 0 && !selectedProducts.includes(String(row['商品名称']||''))) return false;
+            if(selectedSpecs.length > 0 && !selectedSpecs.includes(String(row['商品规格']||''))) return false;
+            if(selectedProvinces.length > 0 && !selectedProvinces.includes(String(row['省份']||'').trim())) return false;
+            if(selectedWarehouses.length > 0 && !selectedWarehouses.includes(String(row['发货仓库']||'').trim())) return false;
             if(dateStart || dateEnd) {
                 let d = String(row['评价日期'] || '').substring(0, 10);
                 if(dateStart && d < dateStart) return false;
@@ -1100,54 +1358,27 @@
     }
 
     function resetFilters() {
-        document.getElementById('filterStore').value = '';
-        document.getElementById('filterCategory').value = '';
-        document.getElementById('filterLevel').value = '';
-        document.getElementById('filterProduct').value = '';
-        document.getElementById('filterSpec').value = '';
         document.getElementById('filterDateStart').value = '';
         document.getElementById('filterDateEnd').value = '';
+        checkAll('storeDropdown', false);
+        checkAll('categoryDropdown', false);
+        checkAll('levelDropdown', false);
+        checkAll('productDropdown', false);
+        checkAll('specDropdown', false);
+        checkAll('provinceDropdown', false);
+        checkAll('warehouseDropdown', false);
         currentPage = 1;
         applyFilters();
     }
 
-    function filterProductInput() {
-        const input = document.getElementById('filterProduct');
-        const dropdown = document.getElementById('productDropdown');
-        const keyword = input.value.trim();
-        if(!keyword) { dropdown.classList.add('hidden'); applyFilters(); return; }
-        const allProducts = [...new Set(currentDashboardData.map(row => String(row['商品名称']||'')).filter(Boolean))];
-        const matches = allProducts.filter(p => p.includes(keyword));
-        if(matches.length === 0) { dropdown.classList.add('hidden'); applyFilters(); return; }
-        dropdown.innerHTML = matches.map(p => `<div class="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm" onclick="selectProduct('${p.replace(/'/g, "\\'")}')">${p}</div>`).join('');
-        dropdown.classList.remove('hidden');
-        applyFilters();
-    }
-    function selectProduct(val) {
-        document.getElementById('filterProduct').value = val;
-        document.getElementById('productDropdown').classList.add('hidden');
-        applyFilters();
-    }
-    function filterSpecInput() {
-        const input = document.getElementById('filterSpec');
-        const dropdown = document.getElementById('specDropdown');
-        const keyword = input.value.trim();
-        if(!keyword) { dropdown.classList.add('hidden'); applyFilters(); return; }
-        const allSpecs = [...new Set(currentDashboardData.map(row => String(row['商品规格']||'')).filter(Boolean))];
-        const matches = allSpecs.filter(s => s.includes(keyword));
-        if(matches.length === 0) { dropdown.classList.add('hidden'); applyFilters(); return; }
-        dropdown.innerHTML = matches.map(s => `<div class="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm" onclick="selectSpec('${s.replace(/'/g, "\\'")}')">${s}</div>`).join('');
-        dropdown.classList.remove('hidden');
-        applyFilters();
-    }
-    function selectSpec(val) {
-        document.getElementById('filterSpec').value = val;
-        document.getElementById('specDropdown').classList.add('hidden');
-        applyFilters();
-    }
     document.addEventListener('click', function(e) {
-        if(!e.target.closest('#filterProduct') && !e.target.closest('#productDropdown')) document.getElementById('productDropdown').classList.add('hidden');
-        if(!e.target.closest('#filterSpec') && !e.target.closest('#specDropdown')) document.getElementById('specDropdown').classList.add('hidden');
+        if(!e.target.closest('#storeFilterBtn') && !e.target.closest('#storeDropdown')) document.getElementById('storeDropdown').classList.add('hidden');
+        if(!e.target.closest('#categoryFilterBtn') && !e.target.closest('#categoryDropdown')) document.getElementById('categoryDropdown').classList.add('hidden');
+        if(!e.target.closest('#levelFilterBtn') && !e.target.closest('#levelDropdown')) document.getElementById('levelDropdown').classList.add('hidden');
+        if(!e.target.closest('#productFilterBtn') && !e.target.closest('#productDropdown')) document.getElementById('productDropdown').classList.add('hidden');
+        if(!e.target.closest('#specFilterBtn') && !e.target.closest('#specDropdown')) document.getElementById('specDropdown').classList.add('hidden');
+        if(!e.target.closest('#provinceFilterBtn') && !e.target.closest('#provinceDropdown')) document.getElementById('provinceDropdown').classList.add('hidden');
+        if(!e.target.closest('#warehouseFilterBtn') && !e.target.closest('#warehouseDropdown')) document.getElementById('warehouseDropdown').classList.add('hidden');
     });
 
     function exportDashboardToExcel() {
