@@ -1,0 +1,1414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>抖音商品评价 AI 分析看板</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background: linear-gradient(135deg, #b2d3d1 0%, #d8e8e7 100%); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        .app-container { width: 96vw; max-width: 1500px; height: 96vh; max-height: 1080px; background: #e3efee; border-radius: 40px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); display: flex; overflow: hidden; }
+        .glass-card { background: rgba(255, 255, 255, 0.5); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.8); box-shadow: 0 8px 24px rgba(149, 157, 165, 0.1); }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); border-radius: 10px; }
+        .glass-table th { background: rgba(255,255,255,0.4); text-align: left; padding: 12px; font-size: 13px; color: #4b5563; font-weight: bold; white-space: nowrap; }
+        .glass-table td { padding: 12px; font-size: 13px; color: #374151; border-bottom: 1px solid rgba(255,255,255,0.5); white-space: nowrap; }
+        .btn-orange { background: linear-gradient(135deg, #ff8a65, #ff7043); }
+        .btn-teal { background: linear-gradient(135deg, #4db6ac, #26a69a); }
+        .btn-purple { background: linear-gradient(135deg, #ba68c8, #ab47bc); }
+        html { scroll-behavior: smooth; }
+        .toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 12px; color: white; font-weight: bold; z-index: 9999; opacity: 0; transform: translateY(-20px); transition: all 0.3s ease; }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast-success { background: linear-gradient(135deg, #4db6ac, #26a69a); }
+        .toast-error { background: linear-gradient(135deg, #ff8a65, #ff7043); }
+        .toast-info { background: linear-gradient(135deg, #42a5f5, #1e88e5); }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="w-24 bg-[#263238] flex flex-col items-center py-10 text-gray-400 flex-shrink-0">
+        <div class="flex flex-col space-y-8 text-xl mt-4">
+            <a href="#" class="text-white relative" title="数据看板">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M11 2v20c-5.07-.5-9-4.79-9-10s3.93-9.5 9-10zm2.03 0v8.99H22c-.47-4.74-4.24-8.52-8.97-8.99zm0 11.01V22c4.74-.47 8.5-4.25 8.97-8.99h-8.97z"/></svg>
+                <span class="absolute top-0 right-0 -mt-1 -mr-2 w-2 h-2 bg-red-500 rounded-full"></span>
+            </a>
+            <a href="#" onclick="exportDB()" class="hover:text-white transition" title="导出数据库">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
+            </a>
+            <a href="#" onclick="document.getElementById('dbImport').click()" class="hover:text-white transition" title="导入数据库">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+            </a>
+        </div>
+        <input type="file" id="dbImport" accept=".db,.sqlite,.sqlite3" class="hidden" onchange="importDB(event)">
+    </div>
+
+    <div class="flex-1 p-10 flex flex-col min-h-0 min-w-0">
+        <div class="flex gap-2 mb-6 border-b border-gray-300/40 pb-3 w-max flex-shrink-0">
+            <button onclick="switchTab('basic')" id="btn-basic" class="px-6 py-2 rounded-xl bg-white/60 shadow-sm font-bold text-gray-800 transition">基础操作页</button>
+            <button onclick="switchTab('dashboard')" id="btn-dashboard" class="px-6 py-2 rounded-xl text-gray-500 hover:bg-white/40 font-bold transition">数据看板页</button>
+        </div>
+
+        <!-- ================= Tab 1: 基础操作页 ================= -->
+        <div id="tab-basic" class="flex gap-10 flex-1 min-h-0 min-w-0">
+            <div class="w-1/2 flex flex-col gap-6">
+                <h1 class="text-2xl font-bold text-gray-800">数据导入与配置</h1>
+                <div class="glass-card rounded-[30px] p-8 relative overflow-hidden flex flex-col justify-center">
+                    <div class="flex justify-between items-center mb-3">
+                        <p class="text-sm text-gray-500">当前数据源</p>
+                        <button onclick="clearAllFiles()" id="clearAllBtn" class="text-xs text-red-400 hover:text-red-600 transition hidden font-bold">
+                            <svg class="inline w-3 h-3 mr-1" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                            清空
+                        </button>
+                    </div>
+                    <div id="fileListContainer" class="flex flex-wrap gap-2 mb-4 max-h-24 overflow-y-auto custom-scrollbar"><span class="text-gray-400 text-sm font-bold mt-1">暂未上传文件</span></div>
+                    <div class="flex items-center text-gray-500 text-sm border-t border-gray-300/40 pt-3">
+                        <svg class="w-4 h-4 mr-2 text-green-600" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                        <span id="dataSourceCount">共读取 <span class="font-bold text-gray-800 mx-1">0</span> 条数据</span>
+                    </div>
+                </div>
+                
+                <div class="flex justify-between gap-4 mt-2">
+                    <input type="file" id="excelUpload" accept=".xlsx, .xls, .csv" multiple class="hidden" onchange="handleFileUpload(event)">
+                    <button onclick="document.getElementById('excelUpload').click()" class="flex-1 btn-orange text-white rounded-2xl py-4 flex flex-col items-center shadow-md hover:opacity-90 transition">
+                        <svg class="w-8 h-8 mb-1" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v-4h-4v4H7l5 5 5-5h-3z"/></svg>
+                        <span class="text-sm font-medium">上传多表格</span>
+                    </button>
+                    <button onclick="startPreprocess()" class="flex-1 btn-teal text-white rounded-2xl py-4 flex flex-col items-center shadow-md hover:opacity-90 transition">
+                        <svg class="w-8 h-8 mb-1" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>
+                        <span class="text-sm font-medium">预处理</span>
+                    </button>
+                    <button onclick="startAnalysis()" id="analyzeBtn" class="flex-1 btn-purple text-white rounded-2xl py-4 flex flex-col items-center shadow-md hover:opacity-90 transition">
+                        <svg class="w-8 h-8 mb-1" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                        <span class="text-sm font-medium">AI 自动打标</span>
+                    </button>
+                </div>
+
+                <div class="mt-4">
+                    <h3 class="text-lg font-bold text-gray-800 mb-3">系统与大模型配置</h3>
+                    <div class="glass-card rounded-[20px] p-5 flex flex-col min-h-[160px]">
+                        <div class="flex gap-6 border-b border-gray-300/50 pb-2 mb-4">
+                            <button onclick="switchConfigTab('store')" id="tab-cfg-store" class="text-sm font-bold text-blue-600 border-b-2 border-blue-600 pb-1">店铺配置</button>
+                            <button onclick="switchConfigTab('api')" id="tab-cfg-api" class="text-sm font-bold text-gray-500 pb-1">API 配置</button>
+                            <button onclick="switchConfigTab('prompt')" id="tab-cfg-prompt" class="text-sm font-bold text-gray-500 pb-1">提示词配置</button>
+                        </div>
+                        <div id="cfg-store" class="flex flex-col gap-3 flex-1">
+                            <div class="flex gap-2"><input type="text" id="newStoreInput" placeholder="输入店铺名称..." class="flex-1 bg-white/60 border border-gray-300 rounded-lg px-3 py-1.5 text-sm outline-none"><button onclick="addStore()" class="bg-blue-500 text-white px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-blue-600 transition">添加</button></div>
+                            <div id="storeList" class="flex flex-wrap gap-2 overflow-y-auto custom-scrollbar max-h-16"></div>
+                        </div>
+                        <div id="cfg-api" class="hidden flex-col gap-3 flex-1 justify-center">
+                            <div><label class="text-xs font-bold text-gray-600 mb-1 block">DeepSeek API Key</label><input type="password" id="apiKeyInput" placeholder="sk-..." class="w-full bg-white/60 border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none font-mono" onchange="saveConfigToDB()"></div>
+                            <div class="text-xs text-gray-500 mt-1">API Key 会自动保存到本地数据库</div>
+                        </div>
+                        <div id="cfg-prompt" class="hidden flex-col gap-2 flex-1">
+                            <textarea id="promptInput" class="w-full h-full flex-1 bg-white/60 border border-gray-300 rounded-lg px-3 py-2 outline-none resize-none text-gray-700 text-sm custom-scrollbar" placeholder="输入提示词..." onchange="saveConfigToDB()">你是一个专业的电商售后评价分类助手。
+你的任务：根据“评价等级”和“评价内容”，输出对应的“评价”分类。
+
+【核心规则】
+1. 如果“评价内容”不为空，则根据“评价等级”选择对应的分类列表：
+   - 评价等级为【好评】或【中评】时，使用「好评/中评分类列表」
+   - 评价等级为【差评】时，使用「差评分类列表」
+2. 从对应分类列表中，选择唯一最匹配的一个类别。
+3. 如果无法明确匹配到任何已有类别，则输出为空。
+
+---
+
+### 好评/中评分类列表（仅用于好评、中评）
+- 口感好
+- 发货快
+- 服务好
+- 成熟度适中
+- 出肉率高/肉多
+- 果型好/饱满
+- 新鲜度高
+- 性价比高
+- 包装好
+- 品质稳定/选品好
+- 会回购
+- 味道香
+- 核小
+- 干包/湿包描述
+- 果肉颜色好
+- 物流快
+- 信任主播/直播间
+- 售后处理满意
+
+
+### 差评分类列表（仅用于差评）
+- 腐烂变质
+- 无法成熟
+- 数量不足/少发
+- 待揽收拦截单
+- 规格不符/少重
+- 商品描述不符
+- 过熟/酒味
+- 物流中断/丢件/虚假签收
+- 出肉率低
+- 夹生
+- 死包
+- 果虫
+- 烂刺/发霉
+- 畸形果
+- 挤压磕碰
+- 烧核
+- 食品安全
+- 错发/漏发
+- 罚款
+- 包裹破损
+- 揽收超时
+- 口感差
+- 生劈
+- 售后态度差/不处理
+
+
+---
+
+【输出格式】
+只输出一个类别名称，不要解释，不要加额外文字。</textarea>
+                            <div class="text-xs text-gray-500">提示词会自动保存到本地数据库</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="w-1/2 flex flex-col gap-6">
+                <div class="flex justify-between items-center"><h1 class="text-2xl font-bold text-gray-800">打标结果预览</h1></div>
+                <div class="flex-1 glass-card rounded-[30px] p-6 flex flex-col min-h-0">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 id="previewTitle" class="text-sm font-bold text-gray-500">最新评价明细 <span id="previewCount" class="text-xs font-normal ml-2"></span></h3>
+                        <button id="syncBtn" onclick="syncToDashboard()" class="hidden bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm shadow-sm font-bold hover:bg-blue-600 transition">
+                            <svg class="inline w-4 h-4 mr-1" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+                            刷入看板
+                        </button>
+                    </div>
+                    <div id="previewList" class="flex-1 overflow-auto custom-scrollbar pr-2 relative"><div class="text-gray-400 text-sm text-center mt-10">暂无数据，请先上传表格</div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= Tab 2: 数据看板页 ================= -->
+        <div id="tab-dashboard" class="hidden flex-col gap-2 flex-1 overflow-y-auto custom-scrollbar pr-4 pb-4 relative min-w-0">
+            <div class="sticky top-0 z-20 bg-[#e8f4f0]/95 backdrop-blur-md -mx-4 px-4 shadow-sm">
+                <!-- 筛选框 -->
+                <div class="glass-card rounded-2xl p-2 flex flex-wrap gap-x-2 gap-y-1 items-center shadow-sm relative" style="z-index:100">
+                    <div class="flex items-center gap-1 relative" style="z-index:9997"><span class="text-xs font-bold text-gray-700">门店:</span><button id="storeFilterBtn" onclick="toggleDropdown('storeDropdown')" class="p-1 rounded-lg bg-white/60 border border-gray-300 text-xs outline-none w-24 text-left truncate"><span id="storeFilterText">全部门店</span></button><div id="storeDropdown" class="hidden absolute top-full left-8 mt-1 w-32 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg p-2" style="z-index:99997; transform: translateZ(0);"><div class="flex justify-between text-xs mb-1 px-1"><button onclick="checkAll('storeDropdown', true); event.stopPropagation();" class="text-blue-600 font-bold hover:underline">全选</button><button onclick="checkAll('storeDropdown', false); event.stopPropagation();" class="text-gray-500 hover:underline">清空</button></div><div id="storeOptions"></div></div></div>
+                    <div class="flex items-center gap-1 relative" style="z-index:9997"><span class="text-xs font-bold text-gray-700">分类:</span><button id="categoryFilterBtn" onclick="toggleDropdown('categoryDropdown')" class="p-1 rounded-lg bg-white/60 border border-gray-300 text-xs outline-none w-24 text-left truncate"><span id="categoryFilterText">全部分类</span></button><div id="categoryDropdown" class="hidden absolute top-full left-8 mt-1 w-32 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg p-2" style="z-index:99997; transform: translateZ(0);"><div class="flex justify-between text-xs mb-1 px-1"><button onclick="checkAll('categoryDropdown', true); event.stopPropagation();" class="text-blue-600 font-bold hover:underline">全选</button><button onclick="checkAll('categoryDropdown', false); event.stopPropagation();" class="text-gray-500 hover:underline">清空</button></div><div id="categoryOptions"></div></div></div>
+                    <div class="flex items-center gap-1 relative" style="z-index:9997"><span class="text-xs font-bold text-gray-700">等级:</span><button id="levelFilterBtn" onclick="toggleDropdown('levelDropdown')" class="p-1 rounded-lg bg-white/60 border border-gray-300 text-xs outline-none w-24 text-left truncate"><span id="levelFilterText">全部等级</span></button><div id="levelDropdown" class="hidden absolute top-full left-8 mt-1 w-32 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg p-2" style="z-index:99997; transform: translateZ(0);"><div class="flex justify-between text-xs mb-1 px-1"><button onclick="checkAll('levelDropdown', true); event.stopPropagation();" class="text-blue-600 font-bold hover:underline">全选</button><button onclick="checkAll('levelDropdown', false); event.stopPropagation();" class="text-gray-500 hover:underline">清空</button></div><div id="levelOptions"><label class="flex items-center gap-2 px-1 py-1 hover:bg-gray-50 rounded cursor-pointer text-xs"><input type="checkbox" value="好评" onchange="updateFilterText('levelDropdown', 'levelFilterText', '全部等级'); applyFilters();"><span class="truncate">好评</span></label><label class="flex items-center gap-2 px-1 py-1 hover:bg-gray-50 rounded cursor-pointer text-xs"><input type="checkbox" value="中评" onchange="updateFilterText('levelDropdown', 'levelFilterText', '全部等级'); applyFilters();"><span class="truncate">中评</span></label><label class="flex items-center gap-2 px-1 py-1 hover:bg-gray-50 rounded cursor-pointer text-xs"><input type="checkbox" value="差评" onchange="updateFilterText('levelDropdown', 'levelFilterText', '全部等级'); applyFilters();"><span class="truncate">差评</span></label></div></div></div>
+                    <div class="flex items-center gap-1 relative" style="z-index:9999"><span class="text-xs font-bold text-gray-700">商品:</span><button id="productFilterBtn" onclick="toggleDropdown('productDropdown')" class="p-1 rounded-lg bg-white/60 border border-gray-300 text-xs outline-none w-24 text-left truncate"><span id="productFilterText">全部商品</span></button><div id="productDropdown" class="hidden absolute top-full left-8 mt-1 w-40 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg p-2" style="z-index:99999; transform: translateZ(0);"><input type="text" id="productDropdownSearch" class="w-full p-1 mb-1 border rounded text-xs" placeholder="搜索..." oninput="filterDropdownOptions('productDropdownSearch','productOptions','productFilterText','全部商品')"><div class="flex justify-between text-xs mb-1 px-1"><button onclick="checkAll('productDropdown', true); event.stopPropagation();" class="text-blue-600 font-bold hover:underline">全选</button><button onclick="checkAll('productDropdown', false); event.stopPropagation();" class="text-gray-500 hover:underline">清空</button></div><div id="productOptions"></div></div></div>
+                    <div class="flex items-center gap-1 relative" style="z-index:9999"><span class="text-xs font-bold text-gray-700">规格:</span><button id="specFilterBtn" onclick="toggleDropdown('specDropdown')" class="p-1 rounded-lg bg-white/60 border border-gray-300 text-xs outline-none w-24 text-left truncate"><span id="specFilterText">全部规格</span></button><div id="specDropdown" class="hidden absolute top-full left-8 mt-1 w-40 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg p-2" style="z-index:99999; transform: translateZ(0);"><input type="text" id="specDropdownSearch" class="w-full p-1 mb-1 border rounded text-xs" placeholder="搜索..." oninput="filterDropdownOptions('specDropdownSearch','specOptions','specFilterText','全部规格')"><div class="flex justify-between text-xs mb-1 px-1"><button onclick="checkAll('specDropdown', true); event.stopPropagation();" class="text-blue-600 font-bold hover:underline">全选</button><button onclick="checkAll('specDropdown', false); event.stopPropagation();" class="text-gray-500 hover:underline">清空</button></div><div id="specOptions"></div></div></div>
+                    <div class="flex items-center gap-1 relative" style="z-index:9998"><span class="text-xs font-bold text-gray-700">省份:</span><button id="provinceFilterBtn" onclick="toggleDropdown('provinceDropdown')" class="p-1 rounded-lg bg-white/60 border border-gray-300 text-xs outline-none w-24 text-left truncate"><span id="provinceFilterText">全部省份</span></button><div id="provinceDropdown" class="hidden absolute top-full left-8 mt-1 w-32 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg p-2" style="z-index:99998; transform: translateZ(0);"><div class="flex justify-between text-xs mb-1 px-1"><button onclick="checkAll('provinceDropdown', true); event.stopPropagation();" class="text-blue-600 font-bold hover:underline">全选</button><button onclick="checkAll('provinceDropdown', false); event.stopPropagation();" class="text-gray-500 hover:underline">清空</button></div><div id="provinceOptions"></div></div></div>
+                    <div class="flex items-center gap-1 relative" style="z-index:9998"><span class="text-xs font-bold text-gray-700">仓库:</span><button id="warehouseFilterBtn" onclick="toggleDropdown('warehouseDropdown')" class="p-1 rounded-lg bg-white/60 border border-gray-300 text-xs outline-none w-24 text-left truncate"><span id="warehouseFilterText">全部仓库</span></button><div id="warehouseDropdown" class="hidden absolute top-full left-8 mt-1 w-32 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg p-2" style="z-index:99998; transform: translateZ(0);"><div class="flex justify-between text-xs mb-1 px-1"><button onclick="checkAll('warehouseDropdown', true); event.stopPropagation();" class="text-blue-600 font-bold hover:underline">全选</button><button onclick="checkAll('warehouseDropdown', false); event.stopPropagation();" class="text-gray-500 hover:underline">清空</button></div><div id="warehouseOptions"></div></div></div>
+                    <div class="flex items-center gap-1"><span class="text-xs font-bold text-gray-700">日期:</span><input type="date" id="filterDateStart" class="p-1 rounded-lg bg-white/60 border border-gray-300 text-xs outline-none w-24" onchange="applyFilters()"><span class="text-gray-500 text-xs">-</span><input type="date" id="filterDateEnd" class="p-1 rounded-lg bg-white/60 border border-gray-300 text-xs outline-none w-24" onchange="applyFilters()"></div>
+                    <div class="flex gap-2">
+                        <button onclick="applyFilters()" class="bg-blue-500 text-white px-3 py-1 rounded-lg text-xs hover:bg-blue-600 transition shadow-sm font-bold">查询</button>
+                        <button onclick="resetFilters()" class="bg-gray-500 text-white px-3 py-1 rounded-lg text-xs hover:bg-gray-600 transition shadow-sm font-bold">重置</button>
+                    </div>
+                    <div class="ml-auto flex gap-2">
+                        <button onclick="exportDashboardToExcel()" class="bg-green-500 text-white px-3 py-1 rounded-lg text-xs hover:bg-green-600 transition shadow-sm font-bold">
+                            <svg class="inline w-3 h-3 mr-1" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>导出Excel
+                        </button>
+                    </div>
+                </div>
+
+                <!-- KPI卡片 -->
+                <div class="grid grid-cols-3 xl:grid-cols-6 gap-2">
+                    <div class="glass-card rounded-xl p-2 text-center"><h3 id="kpi-total" class="text-xl font-bold text-gray-800">0</h3><p class="text-xs font-bold text-gray-600 mt-0.5">总评价数</p></div>
+                    <div class="glass-card rounded-xl p-2 text-center"><h3 id="kpi-good-rate" class="text-xl font-bold text-gray-800">0%</h3><p class="text-xs font-bold text-gray-600 mt-0.5">好评率</p></div>
+                    <div class="glass-card rounded-xl p-2 text-center"><h3 id="kpi-bad-rate" class="text-xl font-bold text-gray-800">0%</h3><p class="text-xs font-bold text-gray-600 mt-0.5">差评率</p></div>
+                    <div class="glass-card rounded-xl p-2 text-center"><h3 id="kpi-avg-score" class="text-xl font-bold text-gray-800">0</h3><p class="text-xs font-bold text-gray-600 mt-0.5">综合评分</p></div>
+                    <div class="glass-card rounded-xl p-2 text-center"><h3 id="kpi-abnormal" class="text-xl font-bold text-red-500">0</h3><p class="text-xs font-bold text-gray-600 mt-0.5">疑似水军</p></div>
+                    <div class="glass-card rounded-xl p-2 text-center"><h3 id="kpi-content-rate" class="text-xl font-bold text-gray-800">0%</h3><p class="text-xs font-bold text-gray-600 mt-0.5">有内容率</p></div>
+                </div>
+
+                <!-- 快捷跳转 -->
+                <div class="flex justify-center gap-6 text-sm font-bold text-blue-600 bg-white/40 py-1 rounded-xl shadow-sm">
+                    <a href="javascript:void(0)" onclick="scrollToSection('section-overview')" class="hover:text-blue-800 transition">
+                        <svg class="inline w-4 h-4 mr-1" viewBox="0 0 24 24" fill="currentColor"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg>
+                        总体概览
+                    </a>
+                    <a href="javascript:void(0)" onclick="scrollToSection('section-trend')" class="hover:text-blue-800 transition">
+                        <svg class="inline w-4 h-4 mr-1" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>
+                        趋势分析
+                    </a>
+                    <a href="javascript:void(0)" onclick="scrollToSection('section-keyword')" class="hover:text-blue-800 transition">
+                        <svg class="inline w-4 h-4 mr-1" viewBox="0 0 24 24" fill="currentColor"><path d="M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg>
+                        关键词分析
+                    </a>
+                    <a href="javascript:void(0)" onclick="scrollToSection('section-abnormal')" class="hover:text-blue-800 transition">
+                        <svg class="inline w-4 h-4 mr-1" viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+                        疑似水军刷评
+                    </a>
+                    <a href="javascript:void(0)" onclick="scrollToSection('section-details')" class="hover:text-blue-800 transition">
+                        <svg class="inline w-4 h-4 mr-1" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                        评价明细
+                    </a>
+                </div>
+            </div>
+
+            <div id="section-overview" class="flex flex-col gap-3 pt-1">
+                <div class="grid grid-cols-4 gap-3" style="height: 220px;">
+                    <div class="glass-card rounded-2xl p-3 flex flex-col overflow-hidden"><h3 class="text-sm font-bold text-gray-800 mb-2 text-center shrink-0">评价等级分布</h3><div class="flex-1 relative w-full min-h-0 overflow-hidden"><canvas id="levelDistChart"></canvas></div></div>
+                    <div class="glass-card rounded-2xl p-3 flex flex-col overflow-hidden"><h3 class="text-sm font-bold text-gray-800 mb-2 text-center shrink-0">评分星级分布</h3><div class="flex-1 relative w-full min-h-0 overflow-hidden"><canvas id="scoreDistChart"></canvas></div></div>
+                    <div class="glass-card rounded-2xl p-3 flex flex-col overflow-hidden" style="height: 220px;">
+                        <h3 class="text-sm font-bold text-gray-800 mb-2 text-center shrink-0">评价分类分布</h3>
+                        <div id="categoryDistContainer" class="space-y-2 px-2 mt-1 overflow-y-auto custom-scrollbar flex-1"><div class="text-center text-xs text-gray-400 mt-10">暂无分类数据</div></div>
+                    </div>
+                    <div class="glass-card rounded-2xl p-3 flex flex-col overflow-hidden"><h3 class="text-sm font-bold text-gray-800 mb-1 text-center shrink-0">各店铺好评率 vs 差评率</h3><div class="flex-1 relative w-full min-h-0 overflow-hidden"><canvas id="shopCompareChart"></canvas></div></div>
+                </div>
+                <div class="grid grid-cols-4 gap-3" style="height: 220px;">
+                    <div class="glass-card rounded-2xl p-2 flex flex-col overflow-hidden"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center shrink-0">好评省份分布</h3><div class="flex-1 relative w-full min-h-0 overflow-hidden" id="provinceGoodMap"></div></div>
+                    <div class="glass-card rounded-2xl p-2 flex flex-col overflow-hidden"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center shrink-0">差评省份分布</h3><div class="flex-1 relative w-full min-h-0 overflow-hidden" id="provinceBadMap"></div></div>
+                    <div class="glass-card rounded-2xl p-2 flex flex-col overflow-hidden"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center shrink-0">好评发货仓库占比</h3><div class="flex-1 relative w-full min-h-0 overflow-hidden"><canvas id="warehouseGoodChart"></canvas></div></div>
+                    <div class="glass-card rounded-2xl p-2 flex flex-col overflow-hidden"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center shrink-0">差评发货仓库占比</h3><div class="flex-1 relative w-full min-h-0 overflow-hidden"><canvas id="warehouseBadChart"></canvas></div></div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-4 gap-3 pt-3" style="height: 220px;">
+                <div class="glass-card rounded-2xl p-2 flex flex-col overflow-hidden"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center shrink-0">每日评价等级趋势</h3><div class="flex-1 relative w-full min-h-0 overflow-hidden"><canvas id="dailyLevelStackChart"></canvas></div></div>
+                <div class="glass-card rounded-2xl p-2 flex flex-col overflow-hidden"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center shrink-0">每日差评趋势</h3><div class="flex-1 relative w-full min-h-0 overflow-hidden"><canvas id="dailyBadTrendChart"></canvas></div></div>
+                <div id="section-keyword" class="glass-card rounded-2xl p-2 flex flex-col"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center shrink-0">正面关键词频率</h3><div class="flex-1 relative w-full min-h-0 overflow-y-auto custom-scrollbar"><canvas id="positiveKeywordChart"></canvas></div></div>
+                <div class="glass-card rounded-2xl p-2 flex flex-col"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center shrink-0">负面关键词频率</h3><div class="flex-1 relative w-full min-h-0 overflow-y-auto custom-scrollbar"><canvas id="negativeKeywordChart"></canvas></div></div>
+            </div>
+
+            <div class="grid grid-cols-4 gap-3 pt-3">
+                <div class="glass-card rounded-2xl p-2"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center">商品名称好评分布</h3><div class="h-48 relative w-full overflow-y-auto custom-scrollbar"><canvas id="productGoodChart"></canvas></div></div>
+                <div class="glass-card rounded-2xl p-2"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center">商品名称差评分布</h3><div class="h-48 relative w-full overflow-y-auto custom-scrollbar"><canvas id="productBadChart"></canvas></div></div>
+                <div class="glass-card rounded-2xl p-2"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center">商品规格好评分布</h3><div class="h-48 relative w-full overflow-y-auto custom-scrollbar"><canvas id="specGoodChart"></canvas></div></div>
+                <div class="glass-card rounded-2xl p-2"><h3 class="text-xs font-bold text-gray-800 mb-1 text-center">商品规格差评分布</h3><div class="h-48 relative w-full overflow-y-auto custom-scrollbar"><canvas id="specBadChart"></canvas></div></div>
+            </div>
+
+            <div id="section-abnormal" class="glass-card rounded-2xl p-5 border border-red-200 pt-4 mt-4">
+                <h3 class="text-lg font-bold text-red-600 mb-4 text-center">疑似水军刷评</h3>
+                <div class="grid grid-cols-2 gap-8">
+                    <div><h3 class="text-md font-bold text-gray-800 mb-4 text-center">疑似水军刷好评 (&gt;=5条)</h3><div class="h-80 relative w-full overflow-y-auto custom-scrollbar"><canvas id="fakeGoodReviewChart"></canvas></div></div>
+                    <div><h3 class="text-md font-bold text-gray-800 mb-4 text-center">疑似水军刷差评 (&gt;=5条)</h3><div class="h-80 relative w-full overflow-y-auto custom-scrollbar"><canvas id="fakeBadReviewChart"></canvas></div></div>
+                </div>
+            </div>
+
+            <div id="section-details" class="glass-card rounded-2xl p-5 pt-4 mt-4 min-w-0">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold text-gray-800">评价明细 (看板全量数据)</h3>
+                    <div class="flex gap-2">
+                        <button onclick="deleteSelected()" class="bg-red-500 text-white px-4 py-1.5 rounded-lg text-sm shadow-sm font-bold hover:bg-red-600 transition">
+                            <svg class="inline w-4 h-4 mr-1" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                            批量删除
+                        </button>
+                        <button onclick="exportSelected()" class="bg-blue-500 text-white px-4 py-1.5 rounded-lg text-sm shadow-sm font-bold hover:bg-blue-600 transition">
+                            <svg class="inline w-4 h-4 mr-1" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                            导出选中
+                        </button>
+                        <button onclick="exportDashboardToExcel()" class="bg-green-500 text-white px-4 py-1.5 rounded-lg text-sm shadow-sm font-bold hover:bg-green-600 transition">
+                            <svg class="inline w-4 h-4 mr-1" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                            导出全部
+                        </button>
+                    </div>
+                </div>
+                <div class="w-full overflow-x-auto custom-scrollbar pb-2">
+                    <table class="w-full glass-table border-collapse whitespace-nowrap min-w-max">
+                        <thead>
+                            <tr>
+                                <th class="w-10"><input type="checkbox" id="selectAll" onclick="toggleSelectAll()"></th>
+                                <th>用户昵称</th><th>评价日期</th><th>省份</th><th>地址</th><th>发货仓库</th><th>订单ID</th><th>商品ID</th>
+                                <th>商品名称</th><th>商品规格</th><th>评价得分</th><th>评价内容</th>
+                                <th>评价分类</th><th>评价等级</th><th>追评内容</th><th>追评时间</th>
+                                <th>商家回复</th><th>门店ID</th><th>门店名称</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dashboardTableBody"><tr><td colspan="19" class="text-center text-gray-400">请先在基础操作页刷入数据</td></tr></tbody>
+                    </table>
+                </div>
+                <div class="flex justify-between items-center mt-4">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm text-gray-600">每页显示:</span>
+                        <select id="pageSize" class="p-1 rounded border border-gray-300 text-sm" onchange="changePageSize()">
+                            <option value="10">10</option>
+                            <option value="20">20</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                            <option value="200">200</option>
+                        </select>
+                        <span class="text-sm text-gray-600">共 <span id="totalRecords">0</span> 条</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="prevPage()" id="btnPrev" class="px-3 py-1 rounded border border-gray-300 text-sm" disabled>上一页</button>
+                        <span class="text-sm text-gray-600">第 <span id="currentPage">1</span> 页 / 共 <span id="totalPages">0</span> 页</span>
+                        <button onclick="nextPage()" id="btnNext" class="px-3 py-1 rounded border border-gray-300 text-sm" disabled>下一页</button>
+                        <input type="number" id="jumpPage" min="1" class="w-16 p-1 rounded border border-gray-300 text-sm text-center" placeholder="页码">
+                        <button onclick="jumpToPage()" class="px-3 py-1 rounded bg-blue-500 text-white text-sm">跳转</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+    Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    let uploadedFiles = []; 
+    let globalExcelData = []; 
+    let configuredStores = [];
+    let chartInstances = {};
+    let mapInstances = {};
+    let chinaGeoJson = null;
+    let dashboardRendered = false;
+    let db = null;
+    let SQL = null;
+    let currentDashboardData = [];
+    let currentPage = 1;
+    let pageSize = 10;
+    let filteredDashboardData = [];
+
+    async function initDB() {
+        SQL = await initSqlJs({ locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}` });
+        db = new SQL.Database();
+        createTables();
+        loadConfigFromDB();
+        showToast('数据库初始化完成', 'success');
+    }
+
+    function createTables() {
+        db.run(`
+            CREATE TABLE IF NOT EXISTS config (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+        `);
+        db.run(`
+            CREATE TABLE IF NOT EXISTS stores (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL
+            )
+        `);
+        db.run(`
+            CREATE TABLE IF NOT EXISTS reviews (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_name TEXT,
+                review_date TEXT,
+                province TEXT,
+                address TEXT,
+                warehouse TEXT,
+                order_id TEXT,
+                product_id TEXT,
+                product_name TEXT,
+                product_spec TEXT,
+                score INTEGER,
+                content TEXT,
+                category TEXT,
+                level TEXT,
+                append_content TEXT,
+                append_time TEXT,
+                merchant_reply TEXT,
+                store_id TEXT,
+                store_name TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        db.run(`
+            CREATE TABLE IF NOT EXISTS uploaded_files (
+                id TEXT PRIMARY KEY,
+                name TEXT,
+                record_count INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        db.run(`CREATE INDEX IF NOT EXISTS idx_reviews_store ON reviews(store_name)`);
+        db.run(`CREATE INDEX IF NOT EXISTS idx_reviews_category ON reviews(category)`);
+        db.run(`CREATE INDEX IF NOT EXISTS idx_reviews_level ON reviews(level)`);
+        db.run(`CREATE INDEX IF NOT EXISTS idx_reviews_date ON reviews(review_date)`);
+    }
+
+    function saveConfigToDB() {
+        if (!db) return;
+        const apiKey = document.getElementById('apiKeyInput').value;
+        const prompt = document.getElementById('promptInput').value;
+        db.run(`INSERT OR REPLACE INTO config (key, value) VALUES ('api_key', ?)`, [apiKey]);
+        db.run(`INSERT OR REPLACE INTO config (key, value) VALUES ('prompt', ?)`, [prompt]);
+        db.run(`DELETE FROM stores`);
+        configuredStores.forEach(store => {
+            db.run(`INSERT INTO stores (name) VALUES (?)`, [store]);
+        });
+    }
+
+    function loadConfigFromDB() {
+        if (!db) return;
+        try {
+            const apiRes = db.exec(`SELECT value FROM config WHERE key = 'api_key'`);
+            if (apiRes.length > 0 && apiRes[0].values.length > 0) {
+                document.getElementById('apiKeyInput').value = apiRes[0].values[0][0];
+            } else {
+                const defaultApiKey = 'sk-752472796e4c4eb2ab443c764552fb24';
+                document.getElementById('apiKeyInput').value = defaultApiKey;
+                db.run(`INSERT OR REPLACE INTO config (key, value) VALUES ('api_key', ?)`, [defaultApiKey]);
+            }
+            const promptRes = db.exec(`SELECT value FROM config WHERE key = 'prompt'`);
+            if (promptRes.length > 0 && promptRes[0].values.length > 0) {
+                document.getElementById('promptInput').value = promptRes[0].values[0][0];
+            } else {
+                const defaultPrompt = document.getElementById('promptInput').value;
+                db.run(`INSERT OR REPLACE INTO config (key, value) VALUES ('prompt', ?)`, [defaultPrompt]);
+            }
+            const storeRes = db.exec(`SELECT name FROM stores ORDER BY id`);
+            if (storeRes.length > 0) {
+                configuredStores = storeRes[0].values.map(v => v[0]);
+            } else {
+                configuredStores = ['佳沃水果旗舰店', '佳沃旗舰店'];
+            }
+        } catch (e) { console.error(e); }
+        renderStores();
+    }
+
+    function exportDB() {
+        if (!db) { showToast('数据库未初始化', 'error'); return; }
+        saveConfigToDB();
+        const data = db.export();
+        const blob = new Blob([data], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `reviews_db_${new Date().toISOString().slice(0,10)}.db`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('数据库已导出', 'success');
+    }
+
+    function importDB(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const Uints = new Uint8Array(e.target.result);
+                db = new SQL.Database(Uints);
+                loadConfigFromDB();
+                loadReviewsFromDB();
+                showToast('数据库导入成功', 'success');
+            } catch (err) {
+                showToast('数据库导入失败: ' + err.message, 'error');
+            }
+        };
+        reader.readAsArrayBuffer(file);
+        event.target.value = '';
+    }
+
+    function insertReviewsToDB(data) {
+        if (!db || data.length === 0) return;
+        const stmt = db.prepare(`
+            INSERT OR IGNORE INTO reviews 
+            (user_name, review_date, province, address, warehouse, order_id, product_id, product_name, product_spec, score, content, category, level, append_content, append_time, merchant_reply, store_id, store_name)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        db.run('BEGIN TRANSACTION');
+        data.forEach(row => {
+            try {
+                stmt.run([
+                    row['用户昵称'] || '',
+                    row['评价日期'] || '',
+                    row['省份'] || '',
+                    row['地址'] || '',
+                    row['发货仓库'] || '',
+                    row['订单ID'] || '',
+                    row['商品ID'] || '',
+                    row['商品名称'] || '',
+                    row['商品规格'] || '',
+                    parseInt(row['商品评价得分']) || 0,
+                    row['评价内容'] || '',
+                    row['评价分类'] || '',
+                    row['评价等级'] || '',
+                    row['追评内容'] || '',
+                    row['追评时间'] || '',
+                    row['商家是否回复'] || '',
+                    row['门店ID'] || '',
+                    row['门店名称'] || ''
+                ]);
+            } catch (e) {}
+        });
+        db.run('COMMIT');
+        stmt.free();
+    }
+
+    function loadReviewsFromDB() {
+        if (!db) return;
+        const res = db.exec(`SELECT * FROM reviews ORDER BY review_date DESC LIMIT 1000`);
+        if (res.length === 0) return;
+        const cols = res[0].columns;
+        const rows = res[0].values.map(v => {
+            const obj = {};
+            cols.forEach((c, i) => {
+                if (c === 'score') obj['商品评价得分'] = v[i];
+                else if (c === 'user_name') obj['用户昵称'] = v[i];
+                else if (c === 'review_date') obj['评价日期'] = v[i];
+                else if (c === 'province') obj['省份'] = v[i];
+                else if (c === 'address') obj['地址'] = v[i];
+                else if (c === 'warehouse') obj['发货仓库'] = v[i];
+                else if (c === 'order_id') obj['订单ID'] = v[i];
+                else if (c === 'product_id') obj['商品ID'] = v[i];
+                else if (c === 'product_name') obj['商品名称'] = v[i];
+                else if (c === 'product_spec') obj['商品规格'] = v[i];
+                else if (c === 'content') obj['评价内容'] = v[i];
+                else if (c === 'category') obj['评价分类'] = v[i];
+                else if (c === 'level') obj['评价等级'] = v[i];
+                else if (c === 'append_content') obj['追评内容'] = v[i];
+                else if (c === 'append_time') obj['追评时间'] = v[i];
+                else if (c === 'merchant_reply') obj['商家是否回复'] = v[i];
+                else if (c === 'store_id') obj['门店ID'] = v[i];
+                else if (c === 'store_name') obj['门店名称'] = v[i];
+            });
+            return obj;
+        });
+        globalExcelData = rows;
+        updateGlobalDataAndUI();
+        if (rows.length > 0) {
+            document.getElementById('syncBtn').classList.remove('hidden');
+        }
+    }
+
+    function showToast(msg, type='info') {
+        const toast = document.getElementById('toast');
+        toast.textContent = msg;
+        toast.className = 'toast toast-' + type;
+        setTimeout(() => toast.classList.add('show'), 10);
+        setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    window.onload = () => { initDB(); };
+
+    function switchConfigTab(tab) {
+        ['store', 'api', 'prompt'].forEach(t => {
+            document.getElementById('cfg-' + t).classList.add('hidden');
+            document.getElementById('cfg-' + t).classList.remove('flex');
+            document.getElementById('tab-cfg-' + t).className = "text-sm font-bold text-gray-500 pb-1";
+        });
+        document.getElementById('cfg-' + tab).classList.remove('hidden');
+        document.getElementById('cfg-' + tab).classList.add('flex');
+        document.getElementById('tab-cfg-' + tab).className = "text-sm font-bold text-blue-600 border-b-2 border-blue-600 pb-1";
+    }
+
+    function renderStores() {
+        const container = document.getElementById('storeList');
+        if (configuredStores.length === 0) { container.innerHTML = '<span class="text-xs text-gray-400 mt-1">暂无店铺</span>'; return; }
+        container.innerHTML = configuredStores.map((store, index) => 
+            '<span class="bg-white/70 border border-gray-300 px-2 py-1 rounded-md text-xs text-gray-700 flex items-center gap-1 shadow-sm">' + store + '<svg onclick="removeStore(' + index + ')" class="w-3 h-3 cursor-pointer text-gray-400 hover:text-red-500 ml-1" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></span>'
+        ).join('');
+    }
+
+    function addStore() {
+        const input = document.getElementById('newStoreInput');
+        const val = input.value.trim();
+        if (val && !configuredStores.includes(val)) { configuredStores.push(val); input.value = ''; renderStores(); saveConfigToDB(); }
+    }
+
+    function removeStore(index) { configuredStores.splice(index, 1); renderStores(); saveConfigToDB(); }
+
+    async function handleFileUpload(event) {
+        const files = event.target.files;
+        if (files.length === 0) return;
+        document.getElementById('dataSourceCount').innerHTML = '<svg class="inline w-4 h-4 animate-spin mr-2" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>解析数据...';
+        for (let i = 0; i < files.length; i++) {
+            try {
+                const data = await readExcelFile(files[i]);
+                uploadedFiles.push({ id: 'file_' + Date.now() + '_' + i, name: files[i].name, data: data });
+                if (db) {
+                    db.run(`INSERT OR REPLACE INTO uploaded_files (id, name, record_count) VALUES (?, ?, ?)`, ['file_' + Date.now() + '_' + i, files[i].name, data.length]);
+                }
+            } catch (err) { console.error(err); showToast('解析失败: ' + files[i].name, 'error'); }
+        }
+        event.target.value = '';
+        updateGlobalDataAndUI();
+        showToast('上传完成', 'success');
+    }
+
+    function removeFile(fileId) { uploadedFiles = uploadedFiles.filter(f => f.id !== fileId); updateGlobalDataAndUI(); }
+    function clearAllFiles() { uploadedFiles = []; globalExcelData = []; updateGlobalDataAndUI(); showToast('已清空', 'info'); }
+
+    function updateGlobalDataAndUI() {
+        globalExcelData = [];
+        uploadedFiles.forEach(f => { globalExcelData = globalExcelData.concat(f.data); });
+        globalExcelData.forEach(row => {
+            let productName = String(row['商品名称'] || '');
+            productName = productName.replace(/【[^】]*】/g, '').trim();
+            row['商品名称'] = productName;
+            let spec = String(row['商品规格'] || '');
+            const parts = spec.split('/');
+            if (parts.length === 2) {
+                row['商品规格'] = parts[0];
+            } else if (parts.length >= 3) {
+                row['商品规格'] = parts[0] + '/' + parts[1];
+            }
+        });
+        const container = document.getElementById('fileListContainer');
+        const clearBtn = document.getElementById('clearAllBtn');
+        if (uploadedFiles.length === 0) {
+            container.innerHTML = '<span class="text-gray-400 text-sm font-bold mt-1">暂无文件</span>';
+            clearBtn.classList.add('hidden');
+            document.getElementById('dataSourceCount').innerHTML = '共读取 <span class="font-bold mx-1">0</span> 条数据';
+            document.getElementById('syncBtn').classList.add('hidden');
+            renderPreviewList([]);
+            return;
+        }
+        clearBtn.classList.remove('hidden');
+        container.innerHTML = uploadedFiles.map(f => 
+            '<div class="flex items-center gap-2 bg-white/70 border border-gray-300 px-3 py-1.5 rounded-lg text-sm shadow-sm"><svg class="w-4 h-4 text-green-600" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg><span class="font-bold text-gray-700 truncate max-w-[150px]">' + f.name + '</span><svg onclick="removeFile(\'' + f.id + '\')" class="w-4 h-4 cursor-pointer text-gray-400 hover:text-red-500 ml-1" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z"/></svg></div>'
+        ).join('');
+        document.getElementById('dataSourceCount').innerHTML = '共读取 <span class="font-bold text-blue-600 mx-1">' + globalExcelData.length + '</span> 条数据';
+        renderPreviewList(globalExcelData.slice(0, 50));
+    }
+
+    function readExcelFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                    resolve(XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: "" }));
+                } catch (err) { reject(err); }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    function getRowHtml(row, index) {
+        const userName = row['用户昵称'] || '-';
+        const date = String(row['评价日期'] || '-').substring(0, 10);
+        const province = row['省份'] || '-';
+        const address = row['地址'] || '-';
+        const warehouse = row['发货仓库'] || '-';
+        const orderId = row['订单ID'] || '-';
+        const prodId = row['商品ID'] || '-';
+        const productName = row['商品名称'] || '-';
+        const spec = row['商品规格'] || '-';
+        const score = row['商品评价得分'] || '-';
+        const content = row['评价内容'] || '-';
+        const category = row['评价分类'] || '-';
+        const level = row['评价等级'] || '-';
+        const appendContent = row['追评内容'] || '-';
+        const appendTime = row['追评时间'] || '-';
+        const isReply = row['商家是否回复'] || '-';
+        const storeId = row['门店ID'] || '-';
+        const store = row['门店名称'] || '-';
+
+        let levelHtml = '<span>' + level + '</span>';
+        if (level.includes('好评')) levelHtml = '<span class="text-green-600 font-bold">' + level + '</span>';
+        else if (level.includes('差评')) levelHtml = '<span class="text-red-500 font-bold">' + level + '</span>';
+        else if (level.includes('中评')) levelHtml = '<span class="text-yellow-600 font-bold">' + level + '</span>';
+
+        return '<tr>' +
+            '<td><input type="checkbox" name="reviewSelect" value="' + orderId + '" data-index="' + index + '"></td>' +
+            '<td><div class="truncate max-w-[80px]" title="' + userName + '">' + userName + '</div></td>' +
+            '<td>' + date + '</td><td>' + province + '</td><td>' + address + '</td><td>' + warehouse + '</td><td>' + orderId + '</td><td>' + prodId + '</td>' +
+            '<td><div class="truncate max-w-[100px]" title="' + productName + '">' + productName + '</div></td>' +
+            '<td><div class="truncate max-w-[80px]" title="' + spec + '">' + spec + '</div></td>' +
+            '<td>' + score + '</td>' +
+            '<td><div class="truncate max-w-[150px]" title="' + content + '">' + content + '</div></td>' +
+            '<td><div class="truncate max-w-[80px] text-blue-600 font-bold" title="' + category + '">' + category + '</div></td>' +
+            '<td>' + levelHtml + '</td>' +
+            '<td><div class="truncate max-w-[100px]" title="' + appendContent + '">' + appendContent + '</div></td>' +
+            '<td>' + appendTime + '</td><td>' + isReply + '</td><td>' + storeId + '</td>' +
+            '<td><div class="truncate max-w-[80px]" title="' + store + '">' + store + '</div></td>' +
+        '</tr>';
+    }
+
+    function renderPreviewList(data) {
+        document.getElementById('previewTitle').innerHTML = '最新评价明细 <span class="text-xs font-normal ml-2">(展示前' + data.length + '条)</span>';
+        const container = document.getElementById('previewList');
+        if (data.length === 0) { container.innerHTML = '<div class="text-gray-400 text-sm text-center mt-10">暂无数据</div>'; return; }
+        
+        let tableHtml = '<table class="w-full glass-table border-collapse whitespace-nowrap min-w-max"><thead><tr>' +
+            '<th class="w-8"></th><th>用户昵称</th><th>评价日期</th><th>省份</th><th>地址</th><th>发货仓库</th><th>订单ID</th><th>商品ID</th>' +
+            '<th>商品名称</th><th>商品规格</th><th>评价得分</th><th>评价内容</th>' +
+            '<th>评价分类</th><th>评价等级</th><th>追评内容</th><th>追评时间</th>' +
+            '<th>商家回复</th><th>门店ID</th><th>门店名称</th></tr></thead><tbody>';
+            
+        data.forEach(row => { tableHtml += getRowHtml(row); });
+        tableHtml += '</tbody></table>';
+        container.innerHTML = tableHtml;
+    }
+
+    function startPreprocess() {
+        if (globalExcelData.length === 0) { alert("请先上传数据表格！"); return; }
+        document.getElementById('previewTitle').innerText = "预处理控制台";
+        document.getElementById('syncBtn').classList.add('hidden');
+        
+        let storeOptions = configuredStores.map(s => '<option value="' + s + '">' + s + '</option>').join('');
+        if(configuredStores.length === 0) storeOptions = '<option value="">请先在左侧添加店铺</option>';
+
+        document.getElementById('previewList').innerHTML = '<div class="flex flex-col h-full bg-white/50 rounded-xl border border-gray-200 p-4 min-h-[250px]"><div id="preprocessLogs" class="flex-1 overflow-y-auto font-mono text-sm text-gray-600 space-y-2"></div><div id="preprocessAction" class="hidden mt-4 pt-4 border-t border-gray-300"><label class="text-sm font-bold text-gray-700 mb-2 block">请选择要填充的门店名称：</label><div class="flex gap-2"><select id="preprocessStoreSelect" class="flex-1 p-2 rounded-lg bg-white border border-gray-300 outline-none text-sm">' + storeOptions + '</select><button onclick="applyPreprocessStore()" class="bg-teal-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-teal-600 transition">确认填充</button></div></div></div>';
+
+        const logs = document.getElementById('preprocessLogs');
+        const appendLog = (msg, type='info') => {
+            const color = type === 'success' ? 'text-green-600' : (type === 'error' ? 'text-red-500' : 'text-gray-600');
+            logs.innerHTML += '<div class="' + color + '">' + msg + '</div>';
+            logs.scrollTop = logs.scrollHeight;
+        };
+
+        appendLog('开始执行数据预处理...');
+        setTimeout(() => {
+            appendLog('正在进行多表合并与去重比对...');
+            const uniqueSet = new Set();
+            const deduplicatedData = [];
+            globalExcelData.forEach(row => {
+                const rowStr = JSON.stringify(row);
+                if (!uniqueSet.has(rowStr)) { uniqueSet.add(rowStr); deduplicatedData.push(row); }
+            });
+            globalExcelData = deduplicatedData;
+            
+            setTimeout(() => {
+                appendLog('去重完成！当前剩余有效数据: ' + globalExcelData.length + ' 条', 'success');
+                appendLog('正在校验并新增【评价分类】字段...');
+                globalExcelData.forEach(row => { if (!row.hasOwnProperty('评价分类')) row['评价分类'] = ''; });
+
+                appendLog('正在从地址中提取省份信息...');
+                let provinceExtracted = 0;
+                globalExcelData.forEach(row => {
+                    const addr = String(row['地址'] || '').trim();
+                    if (addr && !String(row['省份'] || '').trim()) {
+                        const parts = addr.split(/\s+/);
+                        if (parts.length > 0) {
+                            let province = parts[0];
+                            // 直辖市补全
+                            if (['北京','上海','天津','重庆'].includes(province)) province += '市';
+                            row['省份'] = province;
+                            provinceExtracted++;
+                        }
+                    }
+                });
+                appendLog('省份提取完成！共填充 ' + provinceExtracted + ' 条', 'success');
+
+                setTimeout(() => {
+                    appendLog('等待用户选择门店名称进行数据填充...');
+                    document.getElementById('preprocessAction').classList.remove('hidden');
+                }, 400);
+            }, 500);
+        }, 300);
+    }
+
+    function applyPreprocessStore() {
+        const storeName = document.getElementById('preprocessStoreSelect').value;
+        if (!storeName) return;
+        globalExcelData.forEach(row => { row['门店名称'] = storeName; });
+        document.getElementById('dataSourceCount').innerHTML = '共读取 <span class="font-bold text-blue-600 mx-1">' + globalExcelData.length + '</span> 条数据';
+        renderPreviewList(globalExcelData.slice(0, 50)); 
+        document.getElementById('syncBtn').classList.remove('hidden');
+        showToast('预处理完成', 'success');
+    }
+
+    async function startAnalysis() {
+        if (globalExcelData.length === 0) { alert("请先上传数据并完成预处理！"); return; }
+        const apiKey = document.getElementById('apiKeyInput').value.trim();
+        const promptText = document.getElementById('promptInput').value.trim();
+
+        if (!apiKey) { alert("请先在左侧输入 DeepSeek API Key！"); switchConfigTab('api'); return; }
+        if (!promptText) { alert("提示词不能为空！"); switchConfigTab('prompt'); return; }
+
+        saveConfigToDB();
+
+        const rowsToProcess = globalExcelData.filter(row => {
+            const content = String(row['评价内容'] || '').trim();
+            return content !== '' && content !== '-' && content !== 'NaN';
+        });
+
+        if (rowsToProcess.length === 0) { alert("未发现有效的评价内容需要打标！"); return; }
+
+        document.getElementById('previewTitle').innerText = "AI 打标控制台";
+        document.getElementById('syncBtn').classList.add('hidden');
+        
+        document.getElementById('previewList').innerHTML = '<div class="flex flex-col h-full bg-[#1e1e1e] rounded-xl p-4 text-green-400 font-mono text-sm"><div class="mb-3 border-b border-gray-700 pb-2 flex justify-between"><span class="font-bold text-white">AI 批量打标进度: <span id="aiProgressText">准备中...</span></span><div><span class="text-blue-400 mr-4">成功: <span id="aiSuccessCount">0</span></span><span class="text-red-400">失败: <span id="aiFailCount">0</span></span></div></div><div id="aiLogs" class="flex-1 overflow-y-auto space-y-1.5"></div></div>';
+
+        const logs = document.getElementById('aiLogs');
+        const btn = document.getElementById('analyzeBtn');
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<svg class="w-8 h-8 mb-1 animate-spin" viewBox="0 0 24 24" fill="currentColor"><path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.45.83.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"/></svg><span class="text-sm font-medium">AI 批量打标中...</span>';
+        btn.disabled = true;
+
+        let successCount = 0; let failCount = 0;
+        const appendLog = (msg, colorClass='text-gray-300') => {
+            logs.innerHTML += '<div class="' + colorClass + ' truncate">' + msg + '</div>';
+            logs.scrollTop = logs.scrollHeight;
+        };
+
+        appendLog('初始化 API 连接，准备批量上传 ' + rowsToProcess.length + ' 条数据...', 'text-blue-300');
+        document.getElementById('aiProgressText').innerText = '批量处理中 (0 / ' + rowsToProcess.length + ')';
+
+        const BATCH_SIZE = 200;
+        const totalBatches = Math.ceil(rowsToProcess.length / BATCH_SIZE);
+        
+        for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
+            const start = batchIdx * BATCH_SIZE;
+            const end = Math.min(start + BATCH_SIZE, rowsToProcess.length);
+            const batch = rowsToProcess.slice(start, end);
+            
+            const batchContent = batch.map((row, idx) => {
+                return '[' + (start + idx + 1) + '] ' + String(row['评价内容']).trim();
+            }).join('\n---\n');
+
+            appendLog('正在处理第 ' + (batchIdx + 1) + '/' + totalBatches + ' 批 (' + batch.length + ' 条)...', 'text-yellow-300');
+
+            try {
+                const response = await fetch('https://api.deepseek.com/chat/completions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+                    body: JSON.stringify({
+                        model: 'deepseek-chat',
+                        messages: [
+                            { role: 'system', content: promptText + '\n\n【重要】请对以下多条评价依次进行分类，每条评价以 [序号] 开头，请按顺序返回对应的分类结果，每个分类结果占一行，格式为：序号. 分类名称。如果某条评价无法分类，输出"无法分类"。不要输出任何解释文字，只输出分类结果。' },
+                            { role: 'user', content: batchContent }
+                        ],
+                        temperature: 0.1,
+                        max_tokens: 8192
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error('API Error ' + response.status + ': ' + errorText);
+                }
+                const data = await response.json();
+                if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+                    throw new Error('API返回数据格式异常: ' + JSON.stringify(data));
+                }
+                const resultText = data.choices[0].message.content.trim();
+                appendLog('[第' + (batchIdx + 1) + '批返回] ' + resultText.substring(0, 100) + '...', 'text-gray-400');
+                const results = resultText.split('\n').filter(line => line.trim() !== '');
+
+                batch.forEach((row, idx) => {
+                    const resultLine = results[idx] || '';
+                    const category = resultLine.replace(/^\d+\.\s*/, '').replace(/["']/g, '').trim();
+                    if (category && category !== '无法分类') {
+                        row['评价分类'] = category;
+                        successCount++;
+                    } else {
+                        failCount++;
+                    }
+                });
+
+                document.getElementById('aiSuccessCount').innerText = successCount;
+                document.getElementById('aiFailCount').innerText = failCount;
+                document.getElementById('aiProgressText').innerText = '批量处理中 (' + Math.min(end, rowsToProcess.length) + ' / ' + rowsToProcess.length + ')';
+                appendLog('[第' + (batchIdx + 1) + '批成功] 已处理 ' + batch.length + ' 条', 'text-green-400');
+            } catch (error) {
+                failCount += batch.length;
+                document.getElementById('aiFailCount').innerText = failCount;
+                appendLog('[第' + (batchIdx + 1) + '批失败] ' + error.message, 'text-red-400');
+            }
+            
+            await new Promise(r => setTimeout(r, 300));
+        }
+
+        appendLog('批量打标完成！共成功 ' + successCount + ' 条，失败 ' + failCount + ' 条', 'text-white font-bold mt-2');
+        setTimeout(() => {
+            btn.innerHTML = originalHtml; btn.disabled = false;
+            renderPreviewList(globalExcelData.slice(0, 50));
+            document.getElementById('syncBtn').classList.remove('hidden');
+            showToast('AI批量打标完成', 'success');
+        }, 1500);
+    }
+
+    const dataLabelPlugin = {
+        id: 'dataLabelPlugin',
+        afterDatasetsDraw(chart) {
+            if(chart.config.type === 'line') return;
+            const {ctx} = chart;
+            chart.data.datasets.forEach((dataset, i) => {
+                const meta = chart.getDatasetMeta(i);
+                if(meta.hidden) return;
+                const total = dataset.data.reduce((a,b)=> (a||0)+(b||0), 0);
+                meta.data.forEach((element, index) => {
+                    const value = dataset.data[index];
+                    if(value === 0 || value == null) return;
+                    let label = value;
+                    if(chart.config.type === 'doughnut' || chart.config.type === 'pie') {
+                        if(total === 0) return;
+                        label = ((value / total) * 100).toFixed(1) + '%';
+                    }
+                    const pos = element.tooltipPosition();
+                    ctx.save();
+                    ctx.fillStyle = '#333';
+                    ctx.font = 'bold 10px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    if(chart.config.type === 'bar' || chart.config.type === 'line') {
+                        const isHorizontal = chart.options.indexAxis === 'y';
+                        if(isHorizontal) {
+                            ctx.textAlign = 'left';
+                            ctx.fillText(label, pos.x + 4, pos.y);
+                        } else {
+                            ctx.textBaseline = 'bottom';
+                            ctx.fillText(label, pos.x, pos.y - 2);
+                        }
+                    } else {
+                        // 只在占比大于5%时显示，避免重叠
+                        if(chart.config.type === 'doughnut' && value/total <= 0.05) { ctx.restore(); return; }
+                        ctx.fillText(label, pos.x, pos.y);
+                    }
+                    ctx.restore();
+                });
+            });
+        }
+    };
+    function createChart(id, config) {
+        if(chartInstances[id]) chartInstances[id].destroy();
+        if(!config.options) config.options = {};
+        if(!config.options.plugins) config.options.plugins = {};
+        config.options.plugins.dataLabelPlugin = true;
+        if(!config.plugins) config.plugins = [dataLabelPlugin];
+        else if(!config.plugins.includes(dataLabelPlugin)) config.plugins.push(dataLabelPlugin);
+        chartInstances[id] = new Chart(document.getElementById(id).getContext('2d'), config);
+    }
+
+    async function initProvinceMap(containerId, data, total, colorRange) {
+        const dom = document.getElementById(containerId);
+        if(!dom) return;
+        if(mapInstances[containerId]) { mapInstances[containerId].dispose(); }
+        if(!chinaGeoJson) {
+            try { chinaGeoJson = await (await fetch('china.json')).json(); }
+            catch(e) { console.warn('地图数据加载失败', e); return; }
+        }
+        echarts.registerMap('china', chinaGeoJson);
+        const chart = echarts.init(dom);
+        mapInstances[containerId] = chart;
+        const maxVal = data.length ? Math.max(...data.map(d => d.value)) : 0;
+        chart.setOption({
+            tooltip: {
+                trigger: 'item',
+                formatter: function(p) {
+                    if(!p.value && p.value !== 0) return p.name;
+                    const pct = total ? ((p.value / total) * 100).toFixed(1) : '0.0';
+                    return p.name + '<br/>数量: ' + p.value + '<br/>占比: ' + pct + '%';
+                }
+            },
+            visualMap: {
+                min: 0, max: maxVal || 1,
+                left: 'left', bottom: '0',
+                text: ['高','低'],
+                inRange: { color: colorRange },
+                textStyle: { fontSize: 10 }
+            },
+            series: [{
+                name: '省份分布', type: 'map', map: 'china',
+                roam: false, zoom: 1.35, layoutCenter: ['50%', '55%'], layoutSize: '92%',
+                label: { show: false },
+                emphasis: { label: { show: true, fontSize: 10 } },
+                data: data
+            }]
+        });
+    }
+
+    window.addEventListener('resize', () => {
+        Object.values(mapInstances).forEach(chart => chart && chart.resize());
+    });
+
+    function scrollToSection(sectionId) {
+        const section = document.getElementById(sectionId);
+        if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function syncToDashboard() {
+        if (globalExcelData.length === 0) { alert("没有可刷入的数据！"); return; }
+        
+        insertReviewsToDB(globalExcelData);
+        currentDashboardData = [...globalExcelData];
+        renderDashboard(currentDashboardData);
+        switchTab('dashboard');
+        showToast('已刷入看板', 'success');
+    }
+
+    function renderDashboard(data) {
+        filteredDashboardData = data;
+        let agg = { total: data.length, scores: {1:0,2:0,3:0,4:0,5:0}, levels: {good:0,mid:0,bad:0}, scoreSum: 0, contentCount: 0, cats: {}, stores: {}, specs: {}, daily: {}, users: {}, provinces: {good: {}, bad: {}}, warehouses: {good: {}, bad: {}} };
+        const storeSet = new Set();
+        const catSet = new Set();
+        
+        data.forEach((row, i) => {
+            let sStr = String(row['商品评价得分'] || '5'); let score = parseInt(sStr.match(/\d+/) || [5]);
+            if(score>=1 && score<=5) agg.scores[score]++; agg.scoreSum += score;
+
+            let lvl = String(row['评价等级'] || '');
+            if(lvl.includes('好评')) agg.levels.good++; else if(lvl.includes('差评')) agg.levels.bad++; else agg.levels.mid++;
+
+            let content = String(row['评价内容'] || '').trim();
+            if(content && content !== '-' && content !== 'NaN') agg.contentCount++;
+
+            let cat = String(row['评价分类'] || '').trim();
+            if(cat && cat !== '-') { agg.cats[cat] = (agg.cats[cat] || 0) + 1; catSet.add(cat); }
+
+            let store = String(row['门店名称'] || '').trim();
+            if(store) { 
+                if(!agg.stores[store]) agg.stores[store] = {good:0,bad:0,total:0};
+                agg.stores[store].total++;
+                if(lvl.includes('好评')) agg.stores[store].good++;
+                if(lvl.includes('差评')) agg.stores[store].bad++;
+                storeSet.add(store);
+            }
+
+            let spec = String(row['商品规格'] || '').trim();
+            if(spec && spec !== '-') {
+                if(!agg.specs[spec]) agg.specs[spec] = {good:0,bad:0};
+                if(lvl.includes('好评')) agg.specs[spec].good++;
+                if(lvl.includes('差评')) agg.specs[spec].bad++;
+            }
+
+            let product = String(row['商品名称'] || '').trim();
+            if(product && product !== '-') {
+                if(!agg.products) agg.products = {};
+                if(!agg.products[product]) agg.products[product] = {good:0,bad:0};
+                if(lvl.includes('好评')) agg.products[product].good++;
+                if(lvl.includes('差评')) agg.products[product].bad++;
+            }
+
+            let date = String(row['评价日期'] || '').substring(0, 10);
+            if(date && date !== '-') {
+                if(!agg.daily[date]) agg.daily[date] = {scoreSum:0,count:0,good:0,mid:0,bad:0};
+                agg.daily[date].scoreSum += score;
+                agg.daily[date].count++;
+                if(lvl.includes('好评')) agg.daily[date].good++;
+                else if(lvl.includes('差评')) agg.daily[date].bad++;
+                else agg.daily[date].mid++;
+            }
+
+            let user = String(row['用户昵称'] || '').trim();
+            if(user && user !== '-') {
+                if(!agg.users[user]) agg.users[user] = {good:0,bad:0};
+                if(lvl.includes('好评')) agg.users[user].good++;
+                if(lvl.includes('差评')) agg.users[user].bad++;
+            }
+
+            let province = String(row['省份'] || '').trim();
+            if(province && province !== '-') {
+                if(lvl.includes('好评')) agg.provinces.good[province] = (agg.provinces.good[province] || 0) + 1;
+                if(lvl.includes('差评')) agg.provinces.bad[province] = (agg.provinces.bad[province] || 0) + 1;
+            }
+
+            let warehouse = String(row['发货仓库'] || '').trim();
+            if(warehouse && warehouse !== '-') {
+                if(lvl.includes('好评')) agg.warehouses.good[warehouse] = (agg.warehouses.good[warehouse] || 0) + 1;
+                if(lvl.includes('差评')) agg.warehouses.bad[warehouse] = (agg.warehouses.bad[warehouse] || 0) + 1;
+            }
+        });
+
+        document.getElementById('kpi-total').innerText = agg.total;
+        document.getElementById('kpi-good-rate').innerText = agg.total ? ((agg.levels.good / agg.total) * 100).toFixed(1) + '%' : '0%';
+        document.getElementById('kpi-bad-rate').innerText = agg.total ? ((agg.levels.bad / agg.total) * 100).toFixed(1) + '%' : '0%';
+        document.getElementById('kpi-avg-score').innerText = agg.total ? (agg.scoreSum / agg.total).toFixed(2) : '0';
+        document.getElementById('kpi-content-rate').innerText = agg.total ? ((agg.contentCount / agg.total) * 100).toFixed(1) + '%' : '0%';
+        const fakeGoodUsers = Object.entries(agg.users).filter(u=>u[1].good>=5).length;
+        const fakeBadUsers = Object.entries(agg.users).filter(u=>u[1].bad>=5).length;
+        document.getElementById('kpi-abnormal').innerText = fakeGoodUsers + fakeBadUsers;
+
+        renderTablePage();
+
+        fillMultiSelect('storeOptions', 'storeDropdown', 'storeFilterText', Array.from(storeSet).sort(), '全部门店');
+        fillMultiSelect('categoryOptions', 'categoryDropdown', 'categoryFilterText', Array.from(catSet).sort(), '全部分类');
+        const provinceSet = new Set(Object.keys(agg.provinces.good).concat(Object.keys(agg.provinces.bad)));
+        const warehouseSet = new Set(Object.keys(agg.warehouses.good).concat(Object.keys(agg.warehouses.bad)));
+        fillMultiSelect('provinceOptions', 'provinceDropdown', 'provinceFilterText', Array.from(provinceSet).sort(), '全部省份');
+        fillMultiSelect('warehouseOptions', 'warehouseDropdown', 'warehouseFilterText', Array.from(warehouseSet).sort(), '全部仓库');
+        const productSet = new Set(data.map(row => String(row['商品名称']||'')).filter(Boolean));
+        const specSet = new Set(data.map(row => String(row['商品规格']||'')).filter(Boolean));
+        fillMultiSelect('productOptions', 'productDropdown', 'productFilterText', Array.from(productSet).sort(), '全部商品');
+        fillMultiSelect('specOptions', 'specDropdown', 'specFilterText', Array.from(specSet).sort(), '全部规格');
+
+        createChart('levelDistChart', { type: 'doughnut', data: { labels: ['好评', '中评', '差评'], datasets: [{ data: [agg.levels.good, agg.levels.mid, agg.levels.bad], backgroundColor: ['#4db6ac', '#ffd54f', '#ff8a65'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'left', labels: { boxWidth: 8, font: { size: 9 }, padding: 4 } } } } });
+        createChart('scoreDistChart', { type: 'bar', data: { labels: ['1星', '2星', '3星', '4星', '5星'], datasets: [{ data: [agg.scores[1], agg.scores[2], agg.scores[3], agg.scores[4], agg.scores[5]], backgroundColor: ['#ff4d4f', '#ff9800', '#ffc107', '#8bc34a', '#4caf50'], borderRadius: 6 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } } } } });
+
+        let sortedCats = Object.entries(agg.cats).sort((a,b)=>b[1]-a[1]);
+        let catHtml = '';
+        const colors = ['bg-blue-500', 'bg-purple-500', 'bg-teal-500', 'bg-orange-500', 'bg-pink-500', 'bg-indigo-500', 'bg-green-500', 'bg-red-500', 'bg-yellow-500', 'bg-cyan-500'];
+        const textColors = ['text-blue-600', 'text-purple-600', 'text-teal-600', 'text-orange-600', 'text-pink-600', 'text-indigo-600', 'text-green-600', 'text-red-600', 'text-yellow-600', 'text-cyan-600'];
+        sortedCats.forEach((c, i) => {
+            let colorIdx = i % colors.length;
+            let pct = agg.total ? ((c[1] / agg.total) * 100).toFixed(1) : 0;
+            catHtml += '<div class="flex justify-between text-xs"><span class="' + textColors[colorIdx] + ' font-bold">' + c[0] + '</span><span class="font-bold">' + c[1] + '</span></div><div class="w-full bg-gray-200 rounded-full h-2 mb-2"><div class="' + colors[colorIdx] + ' h-2 rounded-full" style="width: ' + pct + '%"></div></div>';
+        });
+        document.getElementById('categoryDistContainer').innerHTML = catHtml || '<div class="text-center text-xs text-gray-400 mt-10">暂无分类数据</div>';
+
+        const storeLabels = Object.keys(agg.stores);
+        const storeGoodRates = storeLabels.map(s => agg.stores[s].total ? ((agg.stores[s].good / agg.stores[s].total) * 100).toFixed(1) : 0);
+        const storeBadRates = storeLabels.map(s => agg.stores[s].total ? ((agg.stores[s].bad / agg.stores[s].total) * 100).toFixed(1) : 0);
+        createChart('shopCompareChart', { type: 'bar', data: { labels: storeLabels.length ? storeLabels : ['暂无数据'], datasets: [ { label: '好评率%', data: storeLabels.length ? storeGoodRates : [0], backgroundColor: '#1abc9c', borderRadius: 4 }, { label: '差评率%', data: storeLabels.length ? storeBadRates : [0], backgroundColor: '#e74c3c', borderRadius: 4 } ] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'left', labels: { boxWidth: 8, font: { size: 9 }, padding: 4 } } }, scales: { x: { grid: { display: false } } } } });
+
+        const productLabels = Object.keys(agg.products || {});
+        createChart('productGoodChart', { type: 'bar', data: { labels: productLabels.length ? productLabels : ['暂无'], datasets: [{ label: '好评数', data: productLabels.length ? productLabels.map(s => agg.products[s].good) : [0], backgroundColor: '#42a5f5', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { display: false } } } } });
+        createChart('productBadChart', { type: 'bar', data: { labels: productLabels.length ? productLabels : ['暂无'], datasets: [{ label: '差评数', data: productLabels.length ? productLabels.map(s => agg.products[s].bad) : [0], backgroundColor: '#ff9800', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { display: false } } } } });
+
+        const specLabels = Object.keys(agg.specs);
+        createChart('specGoodChart', { type: 'bar', data: { labels: specLabels.length ? specLabels : ['暂无'], datasets: [{ label: '好评数', data: specLabels.length ? specLabels.map(s => agg.specs[s].good) : [0], backgroundColor: '#42a5f5', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { display: false } } } } });
+        createChart('specBadChart', { type: 'bar', data: { labels: specLabels.length ? specLabels : ['暂无'], datasets: [{ label: '差评数', data: specLabels.length ? specLabels.map(s => agg.specs[s].bad) : [0], backgroundColor: '#ff9800', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { display: false } } } } });
+
+        const sortedDates = Object.keys(agg.daily).sort();
+        createChart('dailyLevelStackChart', { type: 'line', data: { labels: sortedDates.length ? sortedDates : ['暂无'], datasets: [ { label: '好评', data: sortedDates.length ? sortedDates.map(d => agg.daily[d].good) : [0], borderColor: '#6ccb2d', backgroundColor: 'rgba(108,203,45,0.1)', fill: true, tension: 0.4 }, { label: '中评', data: sortedDates.length ? sortedDates.map(d => agg.daily[d].mid) : [0], borderColor: '#ffc107', backgroundColor: 'rgba(255,193,7,0.1)', fill: true, tension: 0.4 }, { label: '差评', data: sortedDates.length ? sortedDates.map(d => agg.daily[d].bad) : [0], borderColor: '#ff4d4f', backgroundColor: 'rgba(255,77,79,0.1)', fill: true, tension: 0.4 } ] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false } } }, plugins: { legend: { position: 'left', labels: { boxWidth: 8, font: { size: 9 }, padding: 4 } } } } });
+        createChart('dailyBadTrendChart', { type: 'line', data: { labels: sortedDates.length ? sortedDates : ['暂无'], datasets: [{ label: '差评数', data: sortedDates.length ? sortedDates.map(d => agg.daily[d].bad) : [0], borderColor: '#ff4d4f', backgroundColor: 'rgba(255, 77, 79, 0.1)', fill: true, tension: 0.4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } } } } });
+
+        const provinceGoodData = Object.entries(agg.provinces.good).map(([name, value]) => ({name, value}));
+        const provinceBadData = Object.entries(agg.provinces.bad).map(([name, value]) => ({name, value}));
+        initProvinceMap('provinceGoodMap', provinceGoodData, agg.levels.good, ['#e0f2f1','#004d40']);
+        initProvinceMap('provinceBadMap', provinceBadData, agg.levels.bad, ['#ffccbc','#bf360c']);
+
+        const pieColors = ['#4db6ac','#26a69a','#00796b','#80cbc4','#a7ffeb','#64ffda','#00897b','#00695c','#004d40','#009688','#00bfa5','#1de9b6','#00acc1','#26c6da','#4dd0e1'];
+        const whGoodLabels = Object.keys(agg.warehouses.good);
+        const whBadLabels = Object.keys(agg.warehouses.bad);
+        createChart('warehouseGoodChart', { type: 'doughnut', data: { labels: whGoodLabels.length ? whGoodLabels : ['暂无'], datasets: [{ data: whGoodLabels.length ? whGoodLabels.map(w => agg.warehouses.good[w]) : [0], backgroundColor: pieColors }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'left', labels: { boxWidth: 8, font: { size: 9 }, padding: 4 } } } } });
+        createChart('warehouseBadChart', { type: 'doughnut', data: { labels: whBadLabels.length ? whBadLabels : ['暂无'], datasets: [{ data: whBadLabels.length ? whBadLabels.map(w => agg.warehouses.bad[w]) : [0], backgroundColor: pieColors.slice().reverse() }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'left', labels: { boxWidth: 8, font: { size: 9 }, padding: 4 } } } } });
+
+        const posKeywords = {'甜':0,'香':0,'新鲜':0,'糯':0,'满意':0,'好吃':0,'不错':0,'推荐':0,'棒':0,'赞':0};
+        const negKeywords = {'小':0,'硬':0,'苦':0,'不好吃':0,'生的':0,'烂':0,'差':0,'慢':0,'坏':0,'失望':0};
+        data.forEach(row => {
+            let c = String(row['评价内容'] || '');
+            Object.keys(posKeywords).forEach(k => { if(c.includes(k)) posKeywords[k]++; });
+            Object.keys(negKeywords).forEach(k => { if(c.includes(k)) negKeywords[k]++; });
+        });
+        const sortedPos = Object.entries(posKeywords).filter(a=>a[1]>0).sort((a,b)=>b[1]-a[1]);
+        const sortedNeg = Object.entries(negKeywords).filter(a=>a[1]>0).sort((a,b)=>b[1]-a[1]);
+        createChart('positiveKeywordChart', { type: 'bar', data: { labels: sortedPos.length ? sortedPos.map(x=>x[0]) : ['暂无'], datasets: [{ label: '频次', data: sortedPos.length ? sortedPos.map(x=>x[1]) : [0], backgroundColor: '#1abc9c', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { display: false } } } } });
+        createChart('negativeKeywordChart', { type: 'bar', data: { labels: sortedNeg.length ? sortedNeg.map(x=>x[0]) : ['暂无'], datasets: [{ label: '频次', data: sortedNeg.length ? sortedNeg.map(x=>x[1]) : [0], backgroundColor: '#e74c3c', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { display: false } } } } });
+
+        const fakeGood = Object.entries(agg.users).filter(u=>u[1].good>=5).sort((a,b)=>b[1].good-a[1].good);
+        const fakeBad = Object.entries(agg.users).filter(u=>u[1].bad>=5).sort((a,b)=>b[1].bad-a[1].bad);
+        createChart('fakeGoodReviewChart', { type: 'bar', data: { labels: fakeGood.length ? fakeGood.map(x=>x[0]) : ['暂无'], datasets: [{ label: '次数', data: fakeGood.length ? fakeGood.map(x=>x[1].good) : [0], backgroundColor: '#ff4d4f', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+        createChart('fakeBadReviewChart', { type: 'bar', data: { labels: fakeBad.length ? fakeBad.map(x=>x[0]) : ['暂无'], datasets: [{ label: '次数', data: fakeBad.length ? fakeBad.map(x=>x[1].bad) : [0], backgroundColor: '#ff4d4f', borderRadius: 4 }] }, options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+    }
+
+    function renderTablePage() {
+        const total = filteredDashboardData.length;
+        const totalPages = Math.ceil(total / pageSize) || 1;
+        if (currentPage > totalPages) currentPage = totalPages;
+        if (currentPage < 1) currentPage = 1;
+        const start = (currentPage - 1) * pageSize;
+        const end = start + pageSize;
+        const pageData = filteredDashboardData.slice(start, end);
+
+        let tableHtml = '';
+        pageData.forEach((row, i) => {
+            tableHtml += getRowHtml(row, start + i);
+        });
+
+        document.getElementById('dashboardTableBody').innerHTML = tableHtml || '<tr><td colspan="19" class="text-center text-gray-400">暂无数据</td></tr>';
+        document.getElementById('currentPage').innerText = currentPage;
+        document.getElementById('totalPages').innerText = totalPages;
+        document.getElementById('totalRecords').innerText = total;
+        document.getElementById('btnPrev').disabled = currentPage <= 1;
+        document.getElementById('btnNext').disabled = currentPage >= totalPages;
+        document.getElementById('selectAll').checked = false;
+    }
+
+    function changePageSize() {
+        pageSize = parseInt(document.getElementById('pageSize').value);
+        currentPage = 1;
+        renderTablePage();
+    }
+
+    function prevPage() {
+        if (currentPage > 1) {
+            currentPage--;
+            renderTablePage();
+        }
+    }
+
+    function nextPage() {
+        const totalPages = Math.ceil(filteredDashboardData.length / pageSize) || 1;
+        if (currentPage < totalPages) {
+            currentPage++;
+            renderTablePage();
+        }
+    }
+
+    function jumpToPage() {
+        const jump = parseInt(document.getElementById('jumpPage').value);
+        const totalPages = Math.ceil(filteredDashboardData.length / pageSize) || 1;
+        if (jump >= 1 && jump <= totalPages) {
+            currentPage = jump;
+            renderTablePage();
+        } else {
+            showToast('页码超出范围', 'error');
+        }
+    }
+
+    function toggleSelectAll() {
+        const selectAll = document.getElementById('selectAll');
+        const checkboxes = document.querySelectorAll('input[name="reviewSelect"]');
+        checkboxes.forEach(cb => cb.checked = selectAll.checked);
+    }
+
+    function deleteSelected() {
+        const selectedCheckboxes = document.querySelectorAll('input[name="reviewSelect"]:checked');
+        if (selectedCheckboxes.length === 0) {
+            showToast('请先选择要删除的数据', 'error');
+            return;
+        }
+
+        const orderIds = Array.from(selectedCheckboxes).map(cb => cb.value);
+        if (!db) return;
+
+        db.run('BEGIN TRANSACTION');
+        const stmt = db.prepare('DELETE FROM reviews WHERE order_id = ?');
+        orderIds.forEach(id => stmt.run([id]));
+        stmt.free();
+        db.run('COMMIT');
+
+        currentDashboardData = currentDashboardData.filter(row => !orderIds.includes(row['订单ID']));
+        filteredDashboardData = filteredDashboardData.filter(row => !orderIds.includes(row['订单ID']));
+        renderDashboard(filteredDashboardData);
+
+        showToast('成功删除 ' + orderIds.length + ' 条数据', 'success');
+    }
+
+    function exportSelected() {
+        const selectedCheckboxes = document.querySelectorAll('input[name="reviewSelect"]:checked');
+        if (selectedCheckboxes.length === 0) {
+            showToast('请先选择要导出的数据', 'error');
+            return;
+        }
+
+        const orderIds = Array.from(selectedCheckboxes).map(cb => cb.value);
+        const selectedData = currentDashboardData.filter(row => orderIds.includes(row['订单ID']));
+
+        const ws = XLSX.utils.json_to_sheet(selectedData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, '选中评价数据');
+        XLSX.writeFile(wb, '选中评价数据_' + new Date().toISOString().slice(0,10) + '.xlsx');
+        showToast('导出选中数据成功', 'success');
+    }
+
+    function toggleDropdown(id) {
+        const el = document.getElementById(id);
+        const isHidden = el.classList.contains('hidden');
+        ['provinceDropdown','warehouseDropdown','storeDropdown','categoryDropdown','levelDropdown','productDropdown','specDropdown'].forEach(d => {
+            const dd = document.getElementById(d);
+            if(dd) dd.classList.add('hidden');
+        });
+        if(isHidden) el.classList.remove('hidden');
+    }
+    function filterDropdownOptions(searchId, optionsId, textId, defaultText) {
+        const keyword = document.getElementById(searchId).value.trim().toLowerCase();
+        const labels = document.getElementById(optionsId).querySelectorAll('label');
+        labels.forEach(label => {
+            const text = label.querySelector('span').innerText.toLowerCase();
+            label.style.display = text.includes(keyword) ? '' : 'none';
+        });
+        updateFilterText(optionsId.replace('Options','Dropdown'), textId, defaultText);
+    }
+    function getCheckedValues(dropdownId) {
+        const container = document.getElementById(dropdownId);
+        return Array.from(container.querySelectorAll('input[type="checkbox"]')).filter(cb => cb.checked && cb.value).map(cb => cb.value);
+    }
+    function updateFilterText(dropdownId, textId, defaultText) {
+        const values = getCheckedValues(dropdownId);
+        const textEl = document.getElementById(textId);
+        if(values.length === 0) textEl.innerText = defaultText;
+        else if(values.length === 1) textEl.innerText = values[0];
+        else textEl.innerText = '已选' + values.length + '项';
+    }
+    function checkAll(dropdownId, checked) {
+        const container = document.getElementById(dropdownId);
+        container.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = checked);
+        const textMap = {
+            'provinceDropdown': ['provinceFilterText', '全部省份'],
+            'warehouseDropdown': ['warehouseFilterText', '全部仓库'],
+            'storeDropdown': ['storeFilterText', '全部门店'],
+            'categoryDropdown': ['categoryFilterText', '全部分类'],
+            'levelDropdown': ['levelFilterText', '全部等级'],
+            'productDropdown': ['productFilterText', '全部商品'],
+            'specDropdown': ['specFilterText', '全部规格']
+        };
+        if(textMap[dropdownId]) updateFilterText(dropdownId, textMap[dropdownId][0], textMap[dropdownId][1]);
+        applyFilters();
+    }
+    function fillMultiSelect(optionsId, dropdownId, textId, items, defaultText) {
+        const container = document.getElementById(optionsId);
+        const prevChecked = new Set(getCheckedValues(dropdownId));
+        container.innerHTML = items.map(item => {
+            const val = item.replace(/"/g, '&quot;');
+            return '<label class="flex items-center gap-2 px-1 py-1 hover:bg-gray-50 rounded cursor-pointer text-xs"><input type="checkbox" value="' + val + '" ' + (prevChecked.has(item) ? 'checked' : '') + ' onchange="updateFilterText(\'' + dropdownId + '\', \'' + textId + '\', \'' + defaultText + '\'); applyFilters();"><span class="truncate">' + item + '</span></label>';
+        }).join('');
+        updateFilterText(dropdownId, textId, defaultText);
+    }
+
+    function applyFilters() {
+        currentPage = 1;
+        const dateStart = document.getElementById('filterDateStart').value;
+        const dateEnd = document.getElementById('filterDateEnd').value;
+        const selectedStores = getCheckedValues('storeDropdown');
+        const selectedCats = getCheckedValues('categoryDropdown');
+        const selectedLevels = getCheckedValues('levelDropdown');
+        const selectedProducts = getCheckedValues('productDropdown');
+        const selectedSpecs = getCheckedValues('specDropdown');
+        const selectedProvinces = getCheckedValues('provinceDropdown');
+        const selectedWarehouses = getCheckedValues('warehouseDropdown');
+        let filtered = currentDashboardData.filter(row => {
+            if(selectedStores.length > 0 && !selectedStores.includes(String(row['门店名称']||''))) return false;
+            if(selectedCats.length > 0 && !selectedCats.includes(String(row['评价分类']||''))) return false;
+            if(selectedLevels.length > 0 && !selectedLevels.some(l => String(row['评价等级']||'').includes(l))) return false;
+            if(selectedProducts.length > 0 && !selectedProducts.includes(String(row['商品名称']||''))) return false;
+            if(selectedSpecs.length > 0 && !selectedSpecs.includes(String(row['商品规格']||''))) return false;
+            if(selectedProvinces.length > 0 && !selectedProvinces.includes(String(row['省份']||'').trim())) return false;
+            if(selectedWarehouses.length > 0 && !selectedWarehouses.includes(String(row['发货仓库']||'').trim())) return false;
+            if(dateStart || dateEnd) {
+                let d = String(row['评价日期'] || '').substring(0, 10);
+                if(dateStart && d < dateStart) return false;
+                if(dateEnd && d > dateEnd) return false;
+            }
+            return true;
+        });
+        renderDashboard(filtered);
+    }
+
+    function resetFilters() {
+        document.getElementById('filterDateStart').value = '';
+        document.getElementById('filterDateEnd').value = '';
+        checkAll('storeDropdown', false);
+        checkAll('categoryDropdown', false);
+        checkAll('levelDropdown', false);
+        checkAll('productDropdown', false);
+        checkAll('specDropdown', false);
+        checkAll('provinceDropdown', false);
+        checkAll('warehouseDropdown', false);
+        currentPage = 1;
+        applyFilters();
+    }
+
+    document.addEventListener('click', function(e) {
+        if(!e.target.closest('#storeFilterBtn') && !e.target.closest('#storeDropdown')) document.getElementById('storeDropdown').classList.add('hidden');
+        if(!e.target.closest('#categoryFilterBtn') && !e.target.closest('#categoryDropdown')) document.getElementById('categoryDropdown').classList.add('hidden');
+        if(!e.target.closest('#levelFilterBtn') && !e.target.closest('#levelDropdown')) document.getElementById('levelDropdown').classList.add('hidden');
+        if(!e.target.closest('#productFilterBtn') && !e.target.closest('#productDropdown')) document.getElementById('productDropdown').classList.add('hidden');
+        if(!e.target.closest('#specFilterBtn') && !e.target.closest('#specDropdown')) document.getElementById('specDropdown').classList.add('hidden');
+        if(!e.target.closest('#provinceFilterBtn') && !e.target.closest('#provinceDropdown')) document.getElementById('provinceDropdown').classList.add('hidden');
+        if(!e.target.closest('#warehouseFilterBtn') && !e.target.closest('#warehouseDropdown')) document.getElementById('warehouseDropdown').classList.add('hidden');
+    });
+
+    function exportDashboardToExcel() {
+        if(currentDashboardData.length === 0) { showToast('没有数据可导出', 'error'); return; }
+        const ws = XLSX.utils.json_to_sheet(currentDashboardData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, '评价数据');
+        XLSX.writeFile(wb, '评价数据_' + new Date().toISOString().slice(0,10) + '.xlsx');
+        showToast('Excel导出成功', 'success');
+    }
+
+    function switchTab(tabName) {
+        const basicTab = document.getElementById('tab-basic');
+        const dashboardTab = document.getElementById('tab-dashboard');
+        const btnBasic = document.getElementById('btn-basic');
+        const btnDashboard = document.getElementById('btn-dashboard');
+
+        if (tabName === 'basic') {
+            basicTab.classList.remove('hidden'); basicTab.classList.add('flex');
+            dashboardTab.classList.add('hidden'); dashboardTab.classList.remove('flex');
+            btnBasic.className = "px-6 py-2 rounded-xl bg-white/60 shadow-sm font-bold text-gray-800 transition";
+            btnDashboard.className = "px-6 py-2 rounded-xl text-gray-500 hover:bg-white/40 font-bold transition";
+        } else {
+            dashboardTab.classList.remove('hidden'); dashboardTab.classList.add('flex');
+            basicTab.classList.add('hidden'); basicTab.classList.remove('flex');
+            btnDashboard.className = "px-6 py-2 rounded-xl bg-white/60 shadow-sm font-bold text-gray-800 transition";
+            btnBasic.className = "px-6 py-2 rounded-xl text-gray-500 hover:bg-white/40 font-bold transition";
+        }
+    }
+</script>
+
+</body>
+</html>
